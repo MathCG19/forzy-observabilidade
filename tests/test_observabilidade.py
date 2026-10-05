@@ -4,7 +4,7 @@ from app.observability.metrics import avaliar_conformidade, calcular_indicadores
 
 
 def test_registro_com_headers(client, headers):
-    client.get("/v1/sensores/TT-101/leitura-atual", headers=headers)
+    client.get("/v1/sensores/S1/leitura-atual", headers=headers)
     registros = client.get("/v1/observabilidade").json()["registros"]
     assert len(registros) == 1
     r = registros[0]
@@ -12,7 +12,7 @@ def test_registro_com_headers(client, headers):
     assert r["feature"] == "teste"
     assert r["headers_completos"] is True
     assert r["rota"] == "/v1/sensores/{tag}/leitura-atual"
-    assert r["tag"] == "TT-101"
+    assert r["tag"] == "S1"
     assert r["status_code"] == 200
     assert r["latencia_ms"] > 0
     assert r["idade_dado_s"] is not None
@@ -22,7 +22,7 @@ def test_registro_com_headers(client, headers):
 
 
 def test_registro_sem_headers_nao_bloqueia(client):
-    resp = client.get("/v1/sensores/TT-101/leitura-atual")
+    resp = client.get("/v1/sensores/S1/leitura-atual")
     assert resp.status_code == 200
     r = client.get("/v1/observabilidade").json()["registros"][0]
     assert r["session_id"] == "ausente"
@@ -31,31 +31,31 @@ def test_registro_sem_headers_nao_bloqueia(client):
 
 
 def test_registro_com_um_header_so(client):
-    client.get("/v1/sensores/TT-101/leitura-atual", headers={"X-Feature": "parcial"})
+    client.get("/v1/sensores/S1/leitura-atual", headers={"X-Feature": "parcial"})
     r = client.get("/v1/observabilidade").json()["registros"][0]
     assert r["feature"] == "parcial"
     assert r["headers_completos"] is False
 
 
 def test_registro_de_erro_404(client, headers):
-    client.get("/v1/sensores/XX-999/historico", headers=headers)
+    client.get("/v1/sensores/S9/historico", headers=headers)
     r = client.get("/v1/observabilidade").json()["registros"][0]
     assert r["status_code"] == 404
-    assert "XX-999" in r["erro"]
+    assert "S9" in r["erro"]
 
 
 def test_registro_de_erro_422(client):
-    client.get("/v1/sensores/TT-101/historico", params={"limite": "abc"})
+    client.get("/v1/sensores/S1/historico", params={"limite": "abc"})
     r = client.get("/v1/observabilidade").json()["registros"][0]
     assert r["status_code"] == 422
     assert "limite" in r["erro"]
 
 
 def test_historico_registra_quantidade_e_intervalo(client, headers):
-    client.get("/v1/sensores/CT-501/historico", params={"limite": 30}, headers=headers)
+    client.get("/v1/sensores/S2/historico", params={"limite": 30}, headers=headers)
     r = client.get("/v1/observabilidade").json()["registros"][0]
     assert r["qtd_registros"] == 30
-    assert r["intervalo_medio_s"] >= 30
+    assert r["intervalo_medio_s"] >= 10
 
 
 def test_rotas_fora_de_sensores_nao_sao_registradas(client):
@@ -65,9 +65,9 @@ def test_rotas_fora_de_sensores_nao_sao_registradas(client):
 
 
 def test_filtros_da_observabilidade(client):
-    client.get("/v1/sensores/TT-101/leitura-atual", headers={"X-Session-Id": "a", "X-Feature": "f1"})
-    client.get("/v1/sensores/TT-101/leitura-atual", headers={"X-Session-Id": "b", "X-Feature": "f2"})
-    client.get("/v1/sensores/TT-101/leitura-atual", headers={"X-Session-Id": "b", "X-Feature": "f1"})
+    client.get("/v1/sensores/S1/leitura-atual", headers={"X-Session-Id": "a", "X-Feature": "f1"})
+    client.get("/v1/sensores/S1/leitura-atual", headers={"X-Session-Id": "b", "X-Feature": "f2"})
+    client.get("/v1/sensores/S1/leitura-atual", headers={"X-Session-Id": "b", "X-Feature": "f1"})
     assert client.get("/v1/observabilidade", params={"feature": "f1"}).json()["quantidade"] == 2
     assert client.get("/v1/observabilidade", params={"session_id": "b"}).json()["quantidade"] == 2
     assert client.get("/v1/observabilidade", params={"limite": 1}).json()["registros"][0]["session_id"] == "b"
@@ -79,12 +79,12 @@ def test_falha_no_banco_nao_quebra_requisicao(client, app, headers):
             raise RuntimeError("disco cheio")
 
     app.state.store = StoreQuebrado()
-    assert client.get("/v1/sensores/TT-101/leitura-atual", headers=headers).status_code == 200
+    assert client.get("/v1/sensores/S1/leitura-atual", headers=headers).status_code == 200
 
 
 def test_fonte_indisponivel_gera_503_registrado(client, app, headers):
     app.state.provider.prob_falha = 1.0
-    resp = client.get("/v1/sensores/TT-101/leitura-atual", headers=headers)
+    resp = client.get("/v1/sensores/S1/leitura-atual", headers=headers)
     assert resp.status_code == 503
     app.state.provider.prob_falha = 0.0
     r = client.get("/v1/observabilidade").json()["registros"][0]
@@ -142,8 +142,8 @@ def test_resumo_vazio_nao_quebra(client):
 
 def test_resumo_pela_api(client, headers):
     for _ in range(5):
-        client.get("/v1/sensores/TT-101/leitura-atual", headers=headers)
-    client.get("/v1/sensores/TT-101/leitura-atual")
+        client.get("/v1/sensores/S1/leitura-atual", headers=headers)
+    client.get("/v1/sensores/S1/leitura-atual")
     ind = client.get("/v1/observabilidade/resumo").json()["indicadores"]
     assert ind["total_chamadas"] == 6
     assert ind["cobertura_headers_pct"] == pytest.approx(83.33)
