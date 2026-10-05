@@ -1,0 +1,343 @@
+{
+  "gerado_em": "2026-10-04T21:37:09-03:00",
+  "execucoes": {
+    "baseline": {
+      "cenario": "baseline",
+      "inicio": "2026-10-05T00:21:41.070+00:00",
+      "fim": "2026-10-05T00:26:39.953+00:00",
+      "chamadas": 300,
+      "concorrencia": 1,
+      "seed": 7,
+      "status": {
+        "200": 298,
+        "503": 2
+      }
+    },
+    "avaliacao": {
+      "cenario": "avaliacao",
+      "inicio": "2026-10-05T00:26:40.246+00:00",
+      "fim": "2026-10-05T00:34:38.312+00:00",
+      "chamadas": 600,
+      "concorrencia": 3,
+      "seed": 11,
+      "status": {
+        "200": 542,
+        "422": 22,
+        "404": 35,
+        "503": 1
+      }
+    }
+  },
+  "baseline": {
+    "total_chamadas": 300,
+    "periodo_inicio": "2026-10-05T00:21:41.106+00:00",
+    "periodo_fim": "2026-10-05T00:26:39.943+00:00",
+    "latencia_p50_ms": 17.01,
+    "latencia_p95_ms": 44.03,
+    "latencia_p99_ms": 75.99,
+    "taxa_erro_4xx_pct": 0.0,
+    "taxa_erro_5xx_pct": 0.67,
+    "disponibilidade_pct": 99.33,
+    "freshness_p95_s": 44.0,
+    "freshness_media_s": 27.3,
+    "taxa_freshness_no_prazo_pct": 100.0,
+    "completude_media_pct": 99.3,
+    "intervalo_atualizacao_medio_s": 32.4,
+    "intervalo_atualizacao_max_s": 330.0,
+    "cobertura_headers_pct": 100.0,
+    "throughput_por_min": 60.23,
+    "sessoes_unicas": 6,
+    "proporcao_critica_pct": 0.0,
+    "uso_por_feature": {
+      "tela-leitura-atual": 175,
+      "tela-historico": 125
+    }
+  },
+  "avaliacao": {
+    "total_chamadas": 600,
+    "periodo_inicio": "2026-10-05T00:26:40.275+00:00",
+    "periodo_fim": "2026-10-05T00:34:38.300+00:00",
+    "latencia_p50_ms": 15.32,
+    "latencia_p95_ms": 40.8,
+    "latencia_p99_ms": 442.72,
+    "taxa_erro_4xx_pct": 9.5,
+    "taxa_erro_5xx_pct": 0.17,
+    "disponibilidade_pct": 99.83,
+    "freshness_p95_s": 285.7,
+    "freshness_media_s": 66.8,
+    "taxa_freshness_no_prazo_pct": 80.42,
+    "completude_media_pct": 99.4,
+    "intervalo_atualizacao_medio_s": 32.5,
+    "intervalo_atualizacao_max_s": 330.0,
+    "cobertura_headers_pct": 90.17,
+    "throughput_por_min": 75.31,
+    "sessoes_unicas": 11,
+    "proporcao_critica_pct": 0.0,
+    "uso_por_feature": {
+      "tela-leitura-atual": 296,
+      "tela-historico": 164,
+      "integracao-mes": 98,
+      "ausente": 42
+    }
+  },
+  "conformidade": [
+    {
+      "id": "latencia_p95",
+      "indicador": "Latência p95",
+      "valor": 40.8,
+      "unidade": "ms",
+      "baseline": 44.03,
+      "limiar_alerta": 250,
+      "limiar_critico": 1000,
+      "direcao": "maior_pior",
+      "status": "dentro"
+    },
+    {
+      "id": "latencia_p50",
+      "indicador": "Latência p50",
+      "valor": 15.32,
+      "unidade": "ms",
+      "baseline": 17.01,
+      "limiar_alerta": 80,
+      "limiar_critico": 300,
+      "direcao": "maior_pior",
+      "status": "dentro"
+    },
+    {
+      "id": "latencia_p99",
+      "indicador": "Latência p99",
+      "valor": 442.72,
+      "unidade": "ms",
+      "baseline": 75.99,
+      "limiar_alerta": 800,
+      "limiar_critico": 2000,
+      "direcao": "maior_pior",
+      "status": "dentro"
+    },
+    {
+      "id": "erro_5xx",
+      "indicador": "Taxa de erro 5xx",
+      "valor": 0.17,
+      "unidade": "%",
+      "baseline": 0.67,
+      "limiar_alerta": 0.5,
+      "limiar_critico": 1.0,
+      "direcao": "maior_pior",
+      "status": "dentro"
+    },
+    {
+      "id": "erro_4xx",
+      "indicador": "Taxa de erro 4xx",
+      "valor": 9.5,
+      "unidade": "%",
+      "baseline": 0.0,
+      "limiar_alerta": 3,
+      "limiar_critico": 8,
+      "direcao": "maior_pior",
+      "status": "critico"
+    },
+    {
+      "id": "disponibilidade",
+      "indicador": "Disponibilidade",
+      "valor": 99.83,
+      "unidade": "%",
+      "baseline": 99.33,
+      "limiar_alerta": 99.5,
+      "limiar_critico": 99.0,
+      "direcao": "menor_pior",
+      "status": "dentro"
+    },
+    {
+      "id": "freshness_p95",
+      "indicador": "Freshness (idade do dado)",
+      "valor": 285.7,
+      "unidade": "s",
+      "baseline": 44.0,
+      "limiar_alerta": 90,
+      "limiar_critico": 300,
+      "direcao": "maior_pior",
+      "status": "alerta"
+    },
+    {
+      "id": "freshness_no_prazo",
+      "indicador": "Taxa de completude de freshness",
+      "valor": 80.42,
+      "unidade": "%",
+      "baseline": 100.0,
+      "limiar_alerta": 95,
+      "limiar_critico": 90,
+      "direcao": "menor_pior",
+      "status": "critico"
+    },
+    {
+      "id": "completude_payload",
+      "indicador": "Completude do payload",
+      "valor": 99.4,
+      "unidade": "%",
+      "baseline": 99.3,
+      "limiar_alerta": 98,
+      "limiar_critico": 95,
+      "direcao": "menor_pior",
+      "status": "dentro"
+    },
+    {
+      "id": "intervalo_atualizacao",
+      "indicador": "Tempo de atualização",
+      "valor": 32.5,
+      "unidade": "s",
+      "baseline": 32.4,
+      "limiar_alerta": 36,
+      "limiar_critico": 45,
+      "direcao": "maior_pior",
+      "status": "dentro"
+    },
+    {
+      "id": "maior_lacuna",
+      "indicador": "Maior lacuna no histórico",
+      "valor": 330.0,
+      "unidade": "s",
+      "baseline": 330.0,
+      "limiar_alerta": 120,
+      "limiar_critico": 300,
+      "direcao": "maior_pior",
+      "status": "critico"
+    },
+    {
+      "id": "cobertura_headers",
+      "indicador": "Cobertura de headers (rastreabilidade)",
+      "valor": 90.17,
+      "unidade": "%",
+      "baseline": 100.0,
+      "limiar_alerta": 95,
+      "limiar_critico": 90,
+      "direcao": "menor_pior",
+      "status": "alerta"
+    },
+    {
+      "id": "throughput",
+      "indicador": "Volume (throughput)",
+      "valor": 75.31,
+      "unidade": "chamadas/min",
+      "baseline": 60.23,
+      "limiar_alerta": 30.115,
+      "limiar_critico": 12.046,
+      "direcao": "menor_pior",
+      "status": "dentro"
+    },
+    {
+      "id": "uso_feature",
+      "indicador": "Uso por funcionalidade",
+      "valor": {
+        "tela-leitura-atual": 296,
+        "tela-historico": 164,
+        "integracao-mes": 98,
+        "ausente": 42
+      },
+      "unidade": "chamadas",
+      "baseline": null,
+      "limiar_alerta": null,
+      "limiar_critico": null,
+      "direcao": "maior_pior",
+      "status": "informativo"
+    },
+    {
+      "id": "sessoes_unicas",
+      "indicador": "Sessões únicas",
+      "valor": 11,
+      "unidade": "sessões",
+      "baseline": 6,
+      "limiar_alerta": null,
+      "limiar_critico": null,
+      "direcao": "maior_pior",
+      "status": "informativo"
+    },
+    {
+      "id": "proporcao_critica",
+      "indicador": "Proporção de leituras críticas",
+      "valor": 0.0,
+      "unidade": "%",
+      "baseline": 0.0,
+      "limiar_alerta": 5,
+      "limiar_critico": 10,
+      "direcao": "maior_pior",
+      "status": "dentro"
+    }
+  ],
+  "detalhes": {
+    "registros_total_banco": 902,
+    "chamadas_baseline": 300,
+    "chamadas_avaliacao": 600,
+    "sem_header_por_user_agent": {
+      "python-requests/legado": 42,
+      "forzy-streamlit/1.0": 17
+    },
+    "erros_4xx_por_status": {
+      "404": 35,
+      "422": 22
+    },
+    "erros_4xx_por_feature": {
+      "tela-leitura-atual": 35,
+      "tela-historico": 22
+    },
+    "erros_5xx": 1,
+    "latencia_p95_por_rota": {
+      "/v1/sensores/{tag}/historico": 65.3,
+      "/v1/sensores/{tag}/leitura-atual": 32.0
+    },
+    "leituras_desatualizadas_300s": 16,
+    "leituras_atrasadas_90s": 75,
+    "leituras_atuais_ok": 383,
+    "intervalos_reconstruidos": 489,
+    "intervalo_medio_reconstruido_s": 31.96,
+    "chamadas_lentas_acima_250ms": 9,
+    "atrasadas_90s_por_tag": {
+      "CT-501": {
+        "leituras": 62,
+        "idade_max_s": 368.0,
+        "primeira": "2026-10-05T00:30:04.705+00:00"
+      },
+      "VT-301": {
+        "leituras": 13,
+        "idade_max_s": 149.0,
+        "primeira": "2026-10-05T00:33:35.265+00:00"
+      }
+    },
+    "maior_lacuna_por_tag_avaliacao": {
+      "CT-501": 330.0,
+      "PT-201": 30.0,
+      "TT-101": 330.0,
+      "VT-301": 60.0
+    },
+    "maior_lacuna_por_tag_baseline": {
+      "CT-501": 330.0,
+      "PT-201": 30.0,
+      "TT-101": 330.0,
+      "VT-301": 60.0
+    },
+    "sem_header_por_feature_e_user_agent": {
+      "ausente | python-requests/legado": 42,
+      "tela-leitura-atual | forzy-streamlit/1.0": 17
+    },
+    "erros_404_por_tag": {
+      "SENSOR-X": 14,
+      "TT-999": 13,
+      "PT-2O1": 8
+    },
+    "erros_5xx_baseline": 2
+  },
+  "figuras": [
+    "fig01_arquitetura.png",
+    "fig02_latencia_percentis.png",
+    "fig03_histograma_latencia.png",
+    "fig04_status_por_rota.png",
+    "fig05_disponibilidade.png",
+    "fig06_freshness.png",
+    "fig07_freshness_no_prazo.png",
+    "fig08_completude.png",
+    "fig09_intervalo_atualizacao.png",
+    "fig10_cobertura_headers.png",
+    "fig11_throughput.png",
+    "fig12_uso_por_feature.png",
+    "fig13_proporcao_critica.png"
+  ]
+}
