@@ -7,3 +7,5 @@ data/*.db-*
 data/execucoes.json
 .streamlit/secrets.toml
 ~$*.docx
+*.log
+data/*.log
