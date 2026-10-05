@@ -13,9 +13,9 @@ amostragem_nominal_s: 30
 
 baseline_origem:
   cenario: baseline
-  inicio: null
-  fim: null
-  chamadas: null
+  inicio: "2026-10-05T00:21:41.070+00:00"
+  fim: "2026-10-05T00:26:39.953+00:00"
+  chamadas: 300
 
 indicadores:
   - id: latencia_p95
@@ -27,7 +27,7 @@ indicadores:
     janela: 5 minutos, deslizante
     unidade: ms
     direcao: maior_pior
-    baseline: null
+    baseline: 44.03
     limiar_alerta: 250
     limiar_critico: 1000
     justificativa: >
@@ -53,7 +53,7 @@ indicadores:
     janela: 5 minutos, deslizante
     unidade: ms
     direcao: maior_pior
-    baseline: null
+    baseline: 17.01
     limiar_alerta: 80
     limiar_critico: 300
     justificativa: >
@@ -73,7 +73,7 @@ indicadores:
     janela: 15 minutos
     unidade: ms
     direcao: maior_pior
-    baseline: null
+    baseline: 75.99
     limiar_alerta: 800
     limiar_critico: 2000
     justificativa: >
@@ -93,7 +93,7 @@ indicadores:
     janela: 15 minutos
     unidade: "%"
     direcao: maior_pior
-    baseline: null
+    baseline: 0.67
     limiar_alerta: 0.5
     limiar_critico: 1.0
     justificativa: >
@@ -113,7 +113,7 @@ indicadores:
     janela: 1 hora
     unidade: "%"
     direcao: maior_pior
-    baseline: null
+    baseline: 0.0
     limiar_alerta: 3
     limiar_critico: 8
     justificativa: >
@@ -135,7 +135,7 @@ indicadores:
     janela: 30 dias para o SLO, 1 hora para acompanhamento
     unidade: "%"
     direcao: menor_pior
-    baseline: null
+    baseline: 99.33
     limiar_alerta: 99.5
     limiar_critico: 99.0
     justificativa: >
@@ -156,7 +156,7 @@ indicadores:
     janela: 15 minutos
     unidade: s
     direcao: maior_pior
-    baseline: null
+    baseline: 44.0
     limiar_alerta: 90
     limiar_critico: 300
     justificativa: >
@@ -182,7 +182,7 @@ indicadores:
     janela: 1 hora
     unidade: "%"
     direcao: menor_pior
-    baseline: null
+    baseline: 100.0
     limiar_alerta: 95
     limiar_critico: 90
     justificativa: >
@@ -202,7 +202,7 @@ indicadores:
     janela: 1 hora
     unidade: "%"
     direcao: menor_pior
-    baseline: null
+    baseline: 99.3
     limiar_alerta: 98
     limiar_critico: 95
     justificativa: >
@@ -224,7 +224,7 @@ indicadores:
     janela: 1 hora
     unidade: s
     direcao: maior_pior
-    baseline: null
+    baseline: 32.4
     limiar_alerta: 36
     limiar_critico: 45
     justificativa: >
@@ -245,7 +245,7 @@ indicadores:
     janela: 1 hora
     unidade: s
     direcao: maior_pior
-    baseline: null
+    baseline: 330.0
     limiar_alerta: 120
     limiar_critico: 300
     justificativa: >
@@ -266,13 +266,13 @@ indicadores:
     janela: 1 dia
     unidade: "%"
     direcao: menor_pior
-    baseline: null
+    baseline: 100.0
     limiar_alerta: 95
     limiar_critico: 90
     justificativa: >
       Sem os headers não se sabe quem chamou nem de qual funcionalidade, o que quebra
       a rastreabilidade ligada à característica "accountable and transparent" do
-      NIST AI RMF (NIST, 2023). A meta não é 100%
+      NIST AI RMF 1.0. A meta não é 100%
       para tolerar chamadas manuais de teste pelo /docs.
     visualizacao: KPI com meta e barras de cobertura por feature e user_agent
     acao_alerta: Revisar o cliente que está chamando sem contexto (filtrar feature = ausente e ver o user_agent).
@@ -290,7 +290,7 @@ indicadores:
     janela: 5 minutos
     unidade: chamadas/min
     direcao: menor_pior
-    baseline: null
+    baseline: 60.23
     limiar_relativo_baseline: true
     limiar_alerta: 0.5
     limiar_critico: 0.2
@@ -330,7 +330,7 @@ indicadores:
     janela: 1 dia
     unidade: sessões
     direcao: maior_pior
-    baseline: null
+    baseline: 6
     limiar_alerta: null
     limiar_critico: null
     justificativa: Indicador de contexto. Mostra quantas pessoas ou integrações usaram a API.
@@ -348,7 +348,7 @@ indicadores:
     janela: 1 hora
     unidade: "%"
     direcao: maior_pior
-    baseline: null
+    baseline: 0.0
     limiar_alerta: 5
     limiar_critico: 10
     justificativa: >
