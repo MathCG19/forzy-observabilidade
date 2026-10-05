@@ -8,7 +8,7 @@ import yaml
 
 ROTA_LEITURA = "/v1/sensores/{tag}/leitura-atual"
 ROTA_HISTORICO = "/v1/sensores/{tag}/historico"
-PRAZO_FRESHNESS_S = 90
+PRAZO_FRESHNESS_S = 30
 
 
 def percentil(valores: list[float], p: float) -> float | None:

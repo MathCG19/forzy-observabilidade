@@ -6,38 +6,44 @@ from pydantic import BaseModel, Field
 Severidade = Literal["normal", "alerta", "critico", "indeterminada"]
 
 
+class Limite(BaseModel):
+    alerta: float
+    critico: float
+
+
 class SensorInfo(BaseModel):
     tag: str
     descricao: str
-    unidade: str
-    limite_alerta: float
-    limite_critico: float
+    componente_id: int
+    limites: dict[str, Limite] = Field(description="Limiares por grandeza (Metric Contract do CS3)")
 
 
-class LeituraAtual(BaseModel):
-    tag: str
-    descricao: str
-    unidade: str
-    valor: float | None
-    timestamp_leitura: datetime
-    severidade: Severidade
-    qualidade: str | None
-    limite_alerta: float
-    limite_critico: float
-    idade_s: float = Field(description="Segundos entre a leitura e o momento da resposta")
-    desatualizado: bool = Field(description="Verdadeiro quando a idade passa do limite crítico de freshness")
+class SeveridadePorGrandeza(BaseModel):
+    velocidade_mm_s: Literal["normal", "alerta", "critico"] | None
+    aceleracao_g: Literal["normal", "alerta", "critico"] | None
+    temperatura_c: Literal["normal", "alerta", "critico"] | None
 
 
 class LeituraHistorico(BaseModel):
     timestamp_leitura: datetime
-    valor: float | None
+    velocidade_mm_s: float | None = Field(description="Velocidade de vibração RMS")
+    aceleracao_g: float | None
+    temperatura_c: float | None
+    motor_ligado: bool | None = Field(description="Falso quando a vibração está abaixo de 0,3 mm/s")
     severidade: Severidade
-    qualidade: str | None
+    severidade_por_grandeza: SeveridadePorGrandeza
+
+
+class LeituraAtual(LeituraHistorico):
+    tag: str
+    descricao: str
+    componente_id: int
+    idade_s: float = Field(description="Segundos entre a leitura e o momento da resposta")
+    offline: bool = Field(description="Verdadeiro quando a idade passa de 30 s; a leitura não deve ser usada para decisão")
 
 
 class Historico(BaseModel):
     tag: str
-    unidade: str
     inicio: datetime
     fim: datetime
     quantidade: int

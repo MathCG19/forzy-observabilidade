@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from app.providers.sensores import (
     CAMPOS_HISTORICO, CAMPOS_LEITURA, FonteIndisponivel, TagNaoEncontrada, completude,
 )
-from app.schemas import Erro, Historico, LeituraAtual, SensorInfo
+from app.schemas import Erro, Historico, LeituraAtual, Limite, SensorInfo
 
 router = APIRouter(prefix="/v1/sensores", tags=["sensores"])
 
@@ -25,7 +25,11 @@ def _falhar(request: Request, status: int, mensagem: str):
 
 @router.get("", response_model=list[SensorInfo], summary="Lista as tags disponíveis")
 def listar_sensores(request: Request):
-    return [SensorInfo(**s.__dict__) for s in request.app.state.provider.listar()]
+    return [
+        SensorInfo(tag=s.tag, descricao=s.descricao, componente_id=s.componente_id,
+                   limites={g: Limite(alerta=a, critico=c) for g, (a, c) in s.limites.items()})
+        for s in request.app.state.provider.listar()
+    ]
 
 
 @router.get("/{tag}/leitura-atual", response_model=LeituraAtual, responses=RESPOSTAS_ERRO,
@@ -49,7 +53,7 @@ def leitura_atual(tag: str, request: Request):
     return LeituraAtual(
         **leitura,
         idade_s=round(idade, 1),
-        desatualizado=idade > request.app.state.settings.limite_freshness_s,
+        offline=idade > request.app.state.settings.limite_freshness_s,
     )
 
 
@@ -86,6 +90,5 @@ def historico(
         "intervalo_medio_s": round(sum(intervalos) / len(intervalos), 2) if intervalos else None,
         "intervalo_max_s": max(intervalos) if intervalos else None,
     }
-    sensor = provider._sensor(tag)
-    return Historico(tag=sensor.tag, unidade=sensor.unidade, inicio=inicio, fim=fim,
+    return Historico(tag=provider.sensor(tag).tag, inicio=inicio, fim=fim,
                      quantidade=len(leituras), leituras=leituras)

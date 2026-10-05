@@ -7,7 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from app.config import Settings
 from app.observability.middleware import registrar_middleware
 from app.observability.store import ObservabilidadeStore
-from app.providers.sensores import SensoresProvider
+from app.providers.sensores import SensoresProvider, instante_do_historico
 from app.routers import observabilidade, sensores
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -25,6 +25,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.provider = SensoresProvider(
         simular_latencia=settings.simular_latencia,
         prob_falha=settings.prob_falha_fonte,
+        inicio_replay_s=instante_do_historico(settings.inicio_replay),
     )
 
     @app.exception_handler(RequestValidationError)

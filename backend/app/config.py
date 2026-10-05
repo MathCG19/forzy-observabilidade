@@ -20,10 +20,13 @@ class Settings:
             os.getenv("FORZY_CONTRATO_PATH", RAIZ_PROJETO / "governanca" / "metric_contract.yaml")
         )
     )
-    # Intervalo nominal de amostragem do coletor de sensores, em segundos.
-    intervalo_amostragem_s: int = 30
-    # Acima desta idade a leitura atual é marcada como desatualizada (ação do contrato para freshness crítico).
-    limite_freshness_s: float = field(default_factory=lambda: _float_env("FORZY_LIMITE_FRESHNESS_S", 300))
+    # Intervalo do poller de sensores, em segundos (forzy_poller.py).
+    intervalo_amostragem_s: int = 10
+    # Acima desta idade a leitura é marcada como offline e não deve ser usada para decisão (CS3, seção 7.5).
+    limite_freshness_s: float = field(default_factory=lambda: _float_env("FORZY_LIMITE_FRESHNESS_S", 30))
+    # Ponto do histórico de 19/05 em que o replay começa quando a API sobe. O padrão cai logo antes
+    # de uma partida do motor, então os primeiros minutos têm motor parado, partida e operação.
+    inicio_replay: str = field(default_factory=lambda: os.getenv("FORZY_REPLAY_INICIO", "13:38"))
     # Latência simulada da consulta ao historiador. Zerar nos testes.
     simular_latencia: bool = field(default_factory=lambda: os.getenv("FORZY_SIMULAR_LATENCIA", "1") == "1")
     # Probabilidade de a fonte de dados falhar (gera 503). Zerar nos testes.
