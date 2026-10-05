@@ -1,0 +1,360 @@
+# Metric contract da Sensor Monitoring API (provider de Sensores, Forzy Digital Twin)
+#
+# Cada indicador é calculado por backend/app/observability/metrics.py a partir da
+# tabela "chamadas" do SQLite. O campo campo_resumo é a chave devolvida por
+# GET /v1/observabilidade/resumo. A baseline vem do cenário "baseline" de
+# scripts/gerar_trafego.py (ver bloco baseline_origem). Quando
+# limiar_relativo_baseline é true, os limiares são frações da baseline.
+
+versao: 1.0
+servico: Sensor Monitoring API
+escopo: rotas /v1/sensores/{tag}/leitura-atual e /v1/sensores/{tag}/historico
+amostragem_nominal_s: 30
+
+baseline_origem:
+  cenario: baseline
+  inicio: null
+  fim: null
+  chamadas: null
+
+indicadores:
+  - id: latencia_p95
+    nome: Latência p95
+    definicao: Tempo de resposta abaixo do qual ficam 95% das chamadas.
+    formula: percentil 95 de latencia_ms, interpolação linear
+    fonte: chamadas.latencia_ms
+    campo_resumo: latencia_p95_ms
+    janela: 5 minutos, deslizante
+    unidade: ms
+    direcao: maior_pior
+    baseline: null
+    limiar_alerta: 250
+    limiar_critico: 1000
+    justificativa: >
+      A tela do Streamlit faz até três chamadas por interação. Com p95 de 250 ms a
+      soma fica abaixo de 1 s, limite em que o operador ainda percebe a resposta como
+      imediata. Acima de 1 s por chamada a tela trava de forma visível. O alvo em
+      percentil segue a recomendação de Beyer et al. (2016) de não usar média para latência.
+    visualizacao: linha no tempo (p50, p95 e p99) com faixas dos limiares, mais histograma
+    acao_alerta: >
+      Abrir chamado para o time de plataforma, verificar se a lentidão vem do
+      historiador (rota de histórico) ou da própria API, olhando latência por rota.
+    acao_critico: >
+      Acionar o plantão. Reduzir o limite padrão do histórico na interface e
+      desligar a atualização automática da tela até a latência voltar ao alerta.
+    responsavel: Time de plataforma (back-end)
+
+  - id: latencia_p50
+    nome: Latência p50
+    definicao: Mediana do tempo de resposta.
+    formula: percentil 50 de latencia_ms
+    fonte: chamadas.latencia_ms
+    campo_resumo: latencia_p50_ms
+    janela: 5 minutos, deslizante
+    unidade: ms
+    direcao: maior_pior
+    baseline: null
+    limiar_alerta: 80
+    limiar_critico: 300
+    justificativa: >
+      A mediana mostra o caso típico. Um p50 alto com p95 normal indica que toda a
+      API ficou mais lenta, não só casos isolados.
+    visualizacao: mesma linha no tempo da latência p95
+    acao_alerta: Comparar com a última versão implantada e com a carga do momento.
+    acao_critico: Reverter a última implantação se a degradação começou depois dela.
+    responsavel: Time de plataforma (back-end)
+
+  - id: latencia_p99
+    nome: Latência p99
+    definicao: Tempo de resposta abaixo do qual ficam 99% das chamadas.
+    formula: percentil 99 de latencia_ms
+    fonte: chamadas.latencia_ms
+    campo_resumo: latencia_p99_ms
+    janela: 15 minutos
+    unidade: ms
+    direcao: maior_pior
+    baseline: null
+    limiar_alerta: 800
+    limiar_critico: 2000
+    justificativa: >
+      Captura a cauda, onde aparecem consultas lentas ao historiador. A janela é maior
+      porque com poucas chamadas o p99 de 5 minutos oscila demais.
+    visualizacao: linha no tempo junto com p50 e p95
+    acao_alerta: Listar as chamadas acima de 800 ms e agrupar por rota e tag.
+    acao_critico: Abrir incidente com o time do historiador de dados.
+    responsavel: Time de plataforma (back-end)
+
+  - id: erro_5xx
+    nome: Taxa de erro 5xx
+    definicao: Percentual de chamadas que falharam do lado do servidor.
+    formula: chamadas com status >= 500 / total de chamadas x 100
+    fonte: chamadas.status_code
+    campo_resumo: taxa_erro_5xx_pct
+    janela: 15 minutos
+    unidade: "%"
+    direcao: maior_pior
+    baseline: null
+    limiar_alerta: 0.5
+    limiar_critico: 1.0
+    justificativa: >
+      Complemento da disponibilidade. Mantido separado do 4xx porque a causa e o
+      responsável são outros.
+    visualizacao: barras empilhadas por código de status e por rota
+    acao_alerta: Ler o campo erro dos registros 5xx e verificar a conexão com o historiador.
+    acao_critico: Acionar o plantão e avisar na interface que os dados podem estar incompletos.
+    responsavel: Time de plataforma (back-end)
+
+  - id: erro_4xx
+    nome: Taxa de erro 4xx
+    definicao: Percentual de chamadas recusadas por erro do cliente (tag inexistente, parâmetro inválido).
+    formula: chamadas com 400 <= status < 500 / total x 100
+    fonte: chamadas.status_code, chamadas.erro
+    campo_resumo: taxa_erro_4xx_pct
+    janela: 1 hora
+    unidade: "%"
+    direcao: maior_pior
+    baseline: null
+    limiar_alerta: 3
+    limiar_critico: 8
+    justificativa: >
+      Na operação normal a interface só oferece tags válidas, então 4xx deveria ser
+      raro. Taxa alta aponta cliente desatualizado ou integração montando URL errada.
+    visualizacao: barras empilhadas por código de status, com detalhe por feature
+    acao_alerta: Agrupar os 4xx por feature e user_agent para achar o cliente de origem.
+    acao_critico: >
+      Contatar o dono do cliente identificado. Se for integração automática, pedir
+      a suspensão das chamadas até a correção.
+    responsavel: Time de front-end e donos das integrações
+
+  - id: disponibilidade
+    nome: Disponibilidade
+    definicao: Percentual de chamadas atendidas sem erro de servidor.
+    formula: chamadas com status < 500 / total x 100
+    fonte: chamadas.status_code
+    campo_resumo: disponibilidade_pct
+    janela: 30 dias para o SLO, 1 hora para acompanhamento
+    unidade: "%"
+    direcao: menor_pior
+    baseline: null
+    limiar_alerta: 99.5
+    limiar_critico: 99.0
+    justificativa: >
+      Meta de 99,5% dá margem de erro de cerca de 3,6 horas por mês, compatível com um
+      painel de apoio à manutenção que não comanda equipamento. O uso de margem de erro
+      (error budget) segue Beyer et al. (2016).
+    visualizacao: card de KPI com a meta, mais linha da disponibilidade por janela
+    acao_alerta: Congelar mudanças não urgentes na API até a margem se recuperar.
+    acao_critico: Abrir incidente, registrar causa raiz e revisar a meta com a área de manutenção.
+    responsavel: Time de plataforma (back-end)
+
+  - id: freshness_p95
+    nome: Freshness (idade do dado)
+    definicao: Atraso entre o instante da leitura do sensor e o instante em que a API a devolveu.
+    formula: percentil 95 de idade_dado_s nas chamadas de leitura atual com status 200
+    fonte: chamadas.idade_dado_s
+    campo_resumo: freshness_p95_s
+    janela: 15 minutos
+    unidade: s
+    direcao: maior_pior
+    baseline: null
+    limiar_alerta: 90
+    limiar_critico: 300
+    justificativa: >
+      Com amostragem de 30 s e até 20 s de atraso de publicação, uma leitura saudável
+      tem no máximo uns 50 s. Passar de 90 s significa que pelo menos duas amostras
+      seguidas não chegaram. Acima de 5 minutos o dado não serve mais para decisão
+      sobre o equipamento. A API usa esse mesmo valor para marcar a leitura como desatualizada.
+    visualizacao: linha no tempo da idade, com faixas de alerta e crítico pintadas
+    acao_alerta: >
+      Mostrar na interface o aviso de dado atrasado e verificar o coletor da tag
+      afetada (fila, conexão com o CLP).
+    acao_critico: >
+      Marcar a leitura como "dado desatualizado", não usar a leitura para cálculo de
+      severidade nem para inferência do modelo, notificar o responsável pelo coletor.
+    responsavel: Engenharia de dados (coletor)
+
+  - id: freshness_no_prazo
+    nome: Taxa de completude de freshness
+    definicao: Percentual de leituras atuais entregues dentro do prazo de 90 s.
+    formula: leituras com idade_dado_s <= 90 / leituras atuais com status 200 x 100
+    fonte: chamadas.idade_dado_s
+    campo_resumo: taxa_freshness_no_prazo_pct
+    janela: 1 hora
+    unidade: "%"
+    direcao: menor_pior
+    baseline: null
+    limiar_alerta: 95
+    limiar_critico: 90
+    justificativa: >
+      O p95 diz quão ruim fica a cauda. Esta taxa diz com que frequência o prazo é
+      quebrado, que é o número que a manutenção entende como SLO de dado.
+    visualizacao: linha da evolução da taxa por janela, com linha de meta
+    acao_alerta: Levantar quais tags concentram os atrasos e checar o coletor delas.
+    acao_critico: Registrar incidente de qualidade de dado e suspender alertas automáticos baseados nessas tags.
+    responsavel: Engenharia de dados (coletor)
+
+  - id: completude_payload
+    nome: Completude do payload
+    definicao: Proporção média de campos preenchidos (não nulos) nas respostas.
+    formula: média de completude, onde completude = campos não nulos / campos esperados
+    fonte: chamadas.completude
+    campo_resumo: completude_media_pct
+    janela: 1 hora
+    unidade: "%"
+    direcao: menor_pior
+    baseline: null
+    limiar_alerta: 98
+    limiar_critico: 95
+    justificativa: >
+      Completude é uma das características do modelo de qualidade de dados da
+      ISO/IEC 25012. Campo nulo em valor ou qualidade impede o cálculo de severidade.
+    visualizacao: linha da média por janela (gauge no card do resumo)
+    acao_alerta: Identificar quais campos estão vindo nulos e em quais tags.
+    acao_critico: >
+      Bloquear a inferência do modelo com payload incompleto e registrar incidente
+      de qualidade de dado.
+    responsavel: Engenharia de dados (coletor)
+
+  - id: intervalo_atualizacao
+    nome: Tempo de atualização
+    definicao: Intervalo médio entre leituras consecutivas devolvidas pelo histórico.
+    formula: média de intervalo_medio_s nas chamadas de histórico com status 200
+    fonte: chamadas.intervalo_medio_s
+    campo_resumo: intervalo_atualizacao_medio_s
+    janela: 1 hora
+    unidade: s
+    direcao: maior_pior
+    baseline: null
+    limiar_alerta: 36
+    limiar_critico: 45
+    justificativa: >
+      O nominal é 30 s. Média 20% acima disso (36 s) indica perda frequente de
+      amostras. Com 45 s, uma em cada três amostras se perdeu e a série deixa de
+      representar a dinâmica do equipamento.
+    visualizacao: histograma dos intervalos entre leituras
+    acao_alerta: Verificar a taxa de amostragem configurada no coletor.
+    acao_critico: Sinalizar no gráfico de histórico os trechos com lacuna e abrir chamado para o coletor.
+    responsavel: Engenharia de dados (coletor)
+
+  - id: maior_lacuna
+    nome: Maior lacuna no histórico
+    definicao: Maior intervalo sem leitura observado nas respostas de histórico.
+    formula: máximo de intervalo_max_s
+    fonte: chamadas.intervalo_max_s
+    campo_resumo: intervalo_atualizacao_max_s
+    janela: 1 hora
+    unidade: s
+    direcao: maior_pior
+    baseline: null
+    limiar_alerta: 120
+    limiar_critico: 300
+    justificativa: >
+      A média esconde paradas longas do coletor. Quatro amostras perdidas em
+      sequência (120 s) já pedem investigação; cinco minutos sem dado é o mesmo
+      limite crítico usado para freshness.
+    visualizacao: aparece no mesmo histograma, como linha vertical do máximo
+    acao_alerta: Cruzar o horário da lacuna com os logs do coletor.
+    acao_critico: Registrar a parada como incidente do coletor.
+    responsavel: Engenharia de dados (coletor)
+
+  - id: cobertura_headers
+    nome: Cobertura de headers (rastreabilidade)
+    definicao: Percentual de chamadas que trouxeram X-Session-Id e X-Feature.
+    formula: chamadas com headers_completos = true / total x 100
+    fonte: chamadas.headers_completos
+    campo_resumo: cobertura_headers_pct
+    janela: 1 dia
+    unidade: "%"
+    direcao: menor_pior
+    baseline: null
+    limiar_alerta: 95
+    limiar_critico: 90
+    justificativa: >
+      Sem os headers não se sabe quem chamou nem de qual funcionalidade, o que quebra
+      a rastreabilidade ligada à característica "accountable and transparent" do
+      NIST AI RMF (NIST, 2023). A meta não é 100%
+      para tolerar chamadas manuais de teste pelo /docs.
+    visualizacao: KPI com meta e barras de cobertura por feature e user_agent
+    acao_alerta: Revisar o cliente que está chamando sem contexto (filtrar feature = ausente e ver o user_agent).
+    acao_critico: >
+      Notificar o dono do cliente e, se não houver correção em uma sprint, passar a
+      recusar chamadas sem header com 400.
+    responsavel: Governança de IA
+
+  - id: throughput
+    nome: Volume (throughput)
+    definicao: Chamadas por minuto no período.
+    formula: total de chamadas / duração do período em minutos
+    fonte: chamadas.timestamp_utc
+    campo_resumo: throughput_por_min
+    janela: 5 minutos
+    unidade: chamadas/min
+    direcao: menor_pior
+    baseline: null
+    limiar_relativo_baseline: true
+    limiar_alerta: 0.5
+    limiar_critico: 0.2
+    justificativa: >
+      Volume não tem valor certo, depende do turno. O que preocupa é a queda brusca,
+      que costuma indicar cliente parado. Por isso o limiar é relativo à baseline:
+      alerta abaixo de 50% e crítico abaixo de 20%.
+    visualizacao: linha de chamadas por minuto
+    acao_alerta: Confirmar com a operação se houve parada programada.
+    acao_critico: Testar a API de fora (curl no endpoint de leitura) para separar falha do cliente de falha da API.
+    responsavel: Time de plataforma (back-end)
+
+  - id: uso_feature
+    nome: Uso por funcionalidade
+    definicao: Quantidade de chamadas por valor de X-Feature.
+    formula: contagem agrupada por feature
+    fonte: chamadas.feature
+    campo_resumo: uso_por_feature
+    janela: 1 dia
+    unidade: chamadas
+    direcao: maior_pior
+    baseline: null
+    limiar_alerta: null
+    limiar_critico: null
+    justificativa: Indicador de contexto, sem limiar. Ajuda a priorizar melhorias e a explicar mudanças de volume.
+    visualizacao: barras horizontais por feature
+    acao_alerta: Não se aplica.
+    acao_critico: Não se aplica.
+    responsavel: Time de front-end
+
+  - id: sessoes_unicas
+    nome: Sessões únicas
+    definicao: Quantidade de valores distintos de X-Session-Id, sem contar "ausente".
+    formula: contagem distinta de session_id
+    fonte: chamadas.session_id
+    campo_resumo: sessoes_unicas
+    janela: 1 dia
+    unidade: sessões
+    direcao: maior_pior
+    baseline: null
+    limiar_alerta: null
+    limiar_critico: null
+    justificativa: Indicador de contexto. Mostra quantas pessoas ou integrações usaram a API.
+    visualizacao: card de KPI
+    acao_alerta: Não se aplica.
+    acao_critico: Não se aplica.
+    responsavel: Time de front-end
+
+  - id: proporcao_critica
+    nome: Proporção de leituras críticas
+    definicao: Percentual de leituras atuais com severidade crítica.
+    formula: leituras atuais com severidade = critico / leituras atuais com status 200 x 100
+    fonte: chamadas.severidade
+    campo_resumo: proporcao_critica_pct
+    janela: 1 hora
+    unidade: "%"
+    direcao: maior_pior
+    baseline: null
+    limiar_alerta: 5
+    limiar_critico: 10
+    justificativa: >
+      Indicador do equipamento, não da API. Um salto na proporção pode ser problema
+      real na planta ou sensor descalibrado, e nos dois casos alguém precisa olhar.
+    visualizacao: linha da proporção por janela
+    acao_alerta: Avisar a engenharia de manutenção e conferir se a tag tem histórico de falso positivo.
+    acao_critico: Abrir ordem de inspeção do equipamento e verificar a calibração do sensor.
+    responsavel: Engenharia de manutenção
