@@ -1,7 +1,7 @@
 """Consome os três endpoints da Sensor Monitoring API com requests.
 
 Uso:
-    python scripts/consumo_requests.py [--url http://127.0.0.1:8000] [--tag TT-101]
+    python scripts/consumo_requests.py [--url http://127.0.0.1:8000] [--tag S1]
 """
 
 import argparse
@@ -36,7 +36,7 @@ def chamar(url: str, session_id: str, feature: str, params: dict | None = None) 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Consome leitura atual, histórico e observabilidade.")
     parser.add_argument("--url", default=API_URL)
-    parser.add_argument("--tag", default="TT-101")
+    parser.add_argument("--tag", default="S1")
     args = parser.parse_args()
     base = args.url.rstrip("/")
     session_id = str(uuid.uuid4())
@@ -45,9 +45,12 @@ def main() -> None:
     print("1) Leitura atual")
     leitura = chamar(f"{base}/v1/sensores/{args.tag}/leitura-atual", session_id, "script-leitura-atual")
     if leitura:
-        aviso = "  (dado desatualizado)" if leitura["desatualizado"] else ""
-        print(f"  {leitura['tag']} - {leitura['descricao']}")
-        print(f"  valor: {leitura['valor']} {leitura['unidade']}  severidade: {leitura['severidade']}{aviso}")
+        aviso = "  (offline: não usar para decisão)" if leitura["offline"] else ""
+        estado = "ligado" if leitura["motor_ligado"] else "desligado"
+        print(f"  {leitura['tag']} - {leitura['descricao']} (motor {estado})")
+        print(f"  vibração {leitura['velocidade_mm_s']} mm/s | aceleração {leitura['aceleracao_g']} g | "
+              f"temperatura {leitura['temperatura_c']} °C")
+        print(f"  severidade: {leitura['severidade']}{aviso}")
         print(f"  lida em {leitura['timestamp_leitura']} (há {leitura['idade_s']} s)")
     print()
 
@@ -56,7 +59,8 @@ def main() -> None:
     if hist:
         print(f"  {hist['quantidade']} leituras entre {hist['inicio']} e {hist['fim']}")
         for item in hist["leituras"]:
-            print(f"  {item['timestamp_leitura']}  {str(item['valor']):>8} {hist['unidade']}  {item['severidade']}")
+            print(f"  {item['timestamp_leitura']}  {str(item['velocidade_mm_s']):>5} mm/s  {str(item['aceleracao_g']):>5} g  "
+                  f"{str(item['temperatura_c']):>5} °C  {item['severidade']}")
     print()
 
     print("3) Observabilidade (registros desta sessão)")

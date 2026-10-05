@@ -31,7 +31,7 @@ import requests
 
 API_URL = os.getenv("FORZY_API_URL", "http://127.0.0.1:8000")
 ARQUIVO_EXECUCOES = Path(__file__).resolve().parents[1] / "data" / "execucoes.json"
-TAGS = ["TT-101", "PT-201", "VT-301", "CT-501"]
+TAGS = ["S1", "S2"]
 
 
 def _sessoes(n: int) -> list[str]:
@@ -66,7 +66,7 @@ def montar_plano(cenario: str, total: int, rng: random.Random) -> list[dict]:
             chamada["headers"] = {"X-Feature": "tela-leitura-atual"}
         elif sorteio < 0.97:
             chamada.update(rota=rng.choice(["leitura-atual", "historico"]),
-                           tag=rng.choice(["TT-999", "PT-2O1", "SENSOR-X"]))
+                           tag=rng.choice(["S3", "SI", "MOTOR-2"]))
             chamada["headers"] = {"X-Session-Id": rng.choice(sessoes_tela), "X-Feature": "tela-leitura-atual"}
         else:
             chamada.update(rota="historico", params={"limite": rng.choice([0, 9000])})
