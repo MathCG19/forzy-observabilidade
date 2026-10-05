@@ -138,7 +138,7 @@ Testes:
 pytest
 ```
 
-Variáveis opcionais da API: `FORZY_DB_PATH` (caminho do SQLite), `FORZY_REPLAY_INICIO` (hora do histórico de 19/05 em que o replay começa quando a API sobe, padrão `13:38`, logo antes de uma partida do motor), `FORZY_SIMULAR_LATENCIA` (`0` desliga a latência simulada), `FORZY_PROB_FALHA` (probabilidade de 503, padrão 0.004), `FORZY_LIMITE_FRESHNESS_S` (padrão 30).
+Variáveis opcionais da API: `FORZY_DB_PATH` (caminho do SQLite), `FORZY_REPLAY_INICIO` (hora do histórico de 19/05 em que o replay começa quando a API sobe, padrão `13:38`, logo antes de uma partida do motor), `FORZY_SIMULAR_LATENCIA` (`0` desliga a latência simulada), `FORZY_PROB_FALHA` (probabilidade de 503, padrão 0.004), `FORZY_LIMITE_FRESHNESS_S` (padrão 30), `FORZY_PROB_QUEDA_ENDPOINT` (chance de queda simulada do endpoint dos sensores a cada janela de 4 minutos, padrão 0.10; use 0 para gravar uma demonstração sem quedas).
 
 Para repetir a análise do documento, suba a API e rode os dois cenários logo em seguida: com o replay começando em 13:38, a baseline pega o motor parado e a avaliação pega a partida e a operação.
 

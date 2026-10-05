@@ -10,6 +10,7 @@ endpoint fora do ar, poll perdido). O histórico é repetido em laço sobre o re
 import bisect
 import csv
 import math
+import os
 import random
 import time
 from dataclasses import dataclass, field
@@ -21,7 +22,8 @@ ARQUIVO_HISTORICO = Path(__file__).resolve().parent / "dados" / "historico_forzy
 
 INTERVALO_S = 10            # poll_loop do forzy_poller.py
 JANELA_PARADA_S = 240
-PROB_PARADA = 0.10          # chance de o endpoint ficar fora do ar numa janela de 4 min
+# Chance de o endpoint ficar fora do ar numa janela de 4 min. Zerar para demonstração.
+PROB_PARADA = float(os.getenv("FORZY_PROB_QUEDA_ENDPOINT", "0.10"))
 PROB_POLL_PERDIDO = 0.02
 ATRASO_GRAVACAO_S = 0.5     # tempo entre o poll e a linha estar disponível para leitura
 

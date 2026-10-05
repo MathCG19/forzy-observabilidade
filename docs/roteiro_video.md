@@ -2,7 +2,7 @@
 
 Tópicos para falar com as próprias palavras. Os tempos são aproximados.
 
-Antes de gravar: apagar `data/observabilidade.db` se quiser começar do zero, deixar dois terminais abertos na raiz do projeto e o navegador fechado. Para o motor já aparecer em operação, subir a API com `$env:FORZY_REPLAY_INICIO="13:45"` antes do uvicorn. Com o padrão (13:38) ele fica parado nos primeiros 6 minutos.
+Antes de gravar: apagar `data/observabilidade.db` se quiser começar do zero, deixar dois terminais abertos na raiz do projeto e o navegador fechado. Para o motor já aparecer em operação, subir a API com `$env:FORZY_REPLAY_INICIO="13:45"` antes do uvicorn. Para não cair numa queda simulada do endpoint no meio da gravação, use também `$env:FORZY_PROB_QUEDA_ENDPOINT="0"`. Com o padrão (13:38) ele fica parado nos primeiros 6 minutos.
 
 ## 1. Abertura (20 s)
 
