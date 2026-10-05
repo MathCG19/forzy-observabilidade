@@ -142,6 +142,14 @@ Variáveis opcionais da API: `FORZY_DB_PATH` (caminho do SQLite), `FORZY_REPLAY_
 
 Para repetir a análise do documento, suba a API e rode os dois cenários logo em seguida: com o replay começando em 13:38, a baseline pega o motor parado e a avaliação pega a partida e a operação.
 
+Para ver o motor já em operação logo que a API sobe (útil para demonstração), comece o replay depois da partida das 13:44:28:
+
+```powershell
+$env:FORZY_REPLAY_INICIO="13:45"; uvicorn app.main:app --app-dir backend --port 8000
+```
+
+O banco `data/observabilidade.db` não vai para o repositório. Num clone novo a aba Observabilidade abre vazia até alguém usar as telas ou rodar `scripts/gerar_trafego.py`. Rodar o gerador só acrescenta registros; os números do documento mudam apenas se `governanca/analise.py` e `governanca/documento/gerar_documento.py` forem executados de novo.
+
 ## Estrutura
 
 ```

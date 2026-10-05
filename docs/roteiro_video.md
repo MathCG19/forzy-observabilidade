@@ -2,7 +2,7 @@
 
 Tópicos para falar com as próprias palavras. Os tempos são aproximados.
 
-Antes de gravar: apagar `data/observabilidade.db` se quiser começar do zero, deixar dois terminais abertos na raiz do projeto e o navegador fechado.
+Antes de gravar: apagar `data/observabilidade.db` se quiser começar do zero, deixar dois terminais abertos na raiz do projeto e o navegador fechado. Para o motor já aparecer em operação, subir a API com `$env:FORZY_REPLAY_INICIO="13:45"` antes do uvicorn. Com o padrão (13:38) ele fica parado nos primeiros 6 minutos.
 
 ## 1. Abertura (20 s)
 
@@ -11,7 +11,7 @@ Antes de gravar: apagar `data/observabilidade.db` se quiser começar do zero, de
 
 ## 2. Subir a API (30 s)
 
-- Terminal 1: `uvicorn app.main:app --app-dir backend --port 8000`.
+- Terminal 1: `$env:FORZY_REPLAY_INICIO="13:45"; uvicorn app.main:app --app-dir backend --port 8000`.
 - Abrir `http://127.0.0.1:8000/docs`.
 - Mostrar as rotas de sensores e de observabilidade.
 - Executar a leitura atual do S1 pelo próprio /docs (sem headers, de propósito).
@@ -38,6 +38,7 @@ Antes de gravar: apagar `data/observabilidade.db` se quiser começar do zero, de
 - Mostrar o volume subindo, a cobertura de headers caindo por causa do cliente legado e os 404 aparecendo no gráfico de status.
 - Se o motor entrar em operação no replay, mostrar a proporção de leituras críticas subindo (platô de 6,6 mm/s cai na zona D).
 - Comentar por que chamada sem header não é recusada.
+- Lembrar que num clone novo o banco começa vazio e que o gerador é o jeito de popular a aba.
 
 ## 6. Registro no banco (30 s)
 
