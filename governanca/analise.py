@@ -30,9 +30,12 @@ RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ / "backend"))
 
 from app.observability.metrics import (  # noqa: E402
-    ROTA_HISTORICO, ROTA_LEITURA, avaliar_conformidade, calcular_indicadores, carregar_contrato,
+    PRAZO_FRESHNESS_S, ROTA_HISTORICO, ROTA_LEITURA, avaliar_conformidade, calcular_indicadores,
+    carregar_contrato,
 )
-from app.providers.sensores import SENSORES, SensoresProvider  # noqa: E402
+from app.providers.sensores import (  # noqa: E402
+    PISO_OPERACAO_MM_S, SENSORES, SensoresProvider, carregar_historico,
+)
 
 DB = RAIZ / "data" / "observabilidade.db"
 EXECUCOES = RAIZ / "data" / "execucoes.json"
@@ -253,7 +256,9 @@ def fig_freshness(df, inicio_aval, c) -> str:
     topo = max(fr["idade_dado_s"].max() * 1.08, c["limiar_critico"] * 1.15)
     ax.axhspan(c["limiar_alerta"], c["limiar_critico"], color=COR_ALERTA, alpha=0.15, linewidth=0)
     ax.axhspan(c["limiar_critico"], topo, color=COR_CRITICO, alpha=0.10, linewidth=0)
-    ax.scatter(fr["ts"], fr["idade_dado_s"], s=10, color=AZUL, alpha=0.6, label="leitura atual")
+    for tag, cor in (("S1", AZUL), ("S2", LARANJA)):
+        parte = fr[fr["tag"] == tag]
+        ax.scatter(parte["ts"], parte["idade_dado_s"], s=10, color=cor, alpha=0.6, label=f"leitura atual {tag}")
     mediana = fr.set_index("ts").resample("1min")["idade_dado_s"].median().dropna()
     ax.plot(mediana.index, mediana.values, color=TINTA, linewidth=1.5, label="mediana por minuto")
     _faixas(ax, c["limiar_alerta"], c["limiar_critico"], rotulo_unidade=" s")
@@ -266,7 +271,7 @@ def fig_freshness(df, inicio_aval, c) -> str:
     return _salvar(fig, "fig06_freshness.png")
 
 
-def fig_freshness_no_prazo(df, inicio_aval, c, prazo=90) -> str:
+def fig_freshness_no_prazo(df, inicio_aval, c, prazo=PRAZO_FRESHNESS_S) -> str:
     fig, ax = plt.subplots(figsize=(9, 3.4))
     fr = df[(df["rota"] == ROTA_LEITURA) & (df["status_code"] == 200)].set_index("ts")
     taxa = fr.resample("2min")["idade_dado_s"].apply(lambda s: 100 * (s <= prazo).mean() if len(s) else None).dropna()
@@ -316,7 +321,7 @@ def fig_intervalos(intervalos, c_medio, c_max) -> str:
     fig, ax = plt.subplots(figsize=(8, 3.6))
     serie = pd.Series(intervalos)
     contagem = serie.value_counts().sort_index()
-    ax.bar(contagem.index, contagem.values, width=20, color=AZUL, edgecolor="white", linewidth=1)
+    ax.bar(contagem.index, contagem.values, width=8, color=AZUL, edgecolor="white", linewidth=1)
     ax.set_yscale("log")
     ax.axvline(c_max["limiar_alerta"], color=COR_ALERTA, linestyle="--", linewidth=1.5,
                label=f"alerta para maior lacuna ({_dec_g(c_max['limiar_alerta'])} s)")
@@ -391,6 +396,29 @@ def fig_critica(df, inicio_aval, c) -> str:
     return _salvar(fig, "fig13_proporcao_critica.png")
 
 
+def estatisticas_historico_real() -> dict:
+    """Distribuição do histórico real de 19/05 pelas zonas da ISO 10816-1 Classe I."""
+    tempos, portas = carregar_historico()
+    saida = {"linhas": len(tempos), "duracao_h": round(tempos[-1] / 3600, 2)}
+    for porta, tag in ((1, "S1"), (2, "S2")):
+        vel = pd.Series([v for v, _, _ in portas[porta]])
+        temp = pd.Series([t for _, _, t in portas[porta]])
+        acel = pd.Series([a for _, a, _ in portas[porta]])
+        ligado = vel[vel >= PISO_OPERACAO_MM_S]
+        plato = vel[vel >= 4.5]
+        saida[tag] = {
+            "desligado_pct": round(100 * (vel < PISO_OPERACAO_MM_S).mean(), 1),
+            "zona_c_pct": round(100 * ((vel >= 1.8) & (vel < 4.5)).mean(), 1),
+            "zona_d_pct": round(100 * (vel >= 4.5).mean(), 1),
+            "zona_d_entre_ligado_pct": round(100 * (ligado >= 4.5).mean(), 1),
+            "mediana_plato_mm_s": round(float(plato.median()), 2),
+            "velocidade_max_mm_s": float(vel.max()),
+            "temperatura_max_c": float(temp.max()),
+            "aceleracao_max_g": float(acel.max()),
+        }
+    return saida
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--gravar-baseline", action="store_true")
@@ -450,12 +478,12 @@ def main() -> None:
         "erros_5xx": int((aval_df["status_code"] >= 500).sum()),
         "latencia_p95_por_rota": lat_rota,
         "leituras_desatualizadas_300s": int((aval_df["idade_dado_s"] > 300).sum()),
-        "leituras_atrasadas_90s": int((aval_df["idade_dado_s"] > 90).sum()),
+        "leituras_offline_30s": int((aval_df["idade_dado_s"] > PRAZO_FRESHNESS_S).sum()),
         "leituras_atuais_ok": int(((aval_df["rota"] == ROTA_LEITURA) & (aval_df["status_code"] == 200)).sum()),
         "intervalos_reconstruidos": len(intervalos),
         "intervalo_medio_reconstruido_s": round(sum(intervalos) / len(intervalos), 2),
         "chamadas_lentas_acima_250ms": int((aval_df["latencia_ms"] > 250).sum()),
-        "atrasadas_90s_por_tag": aval_df[aval_df["idade_dado_s"] > 90].groupby("tag").agg(
+        "offline_por_tag": aval_df[aval_df["idade_dado_s"] > PRAZO_FRESHNESS_S].groupby("tag").agg(
             leituras=("id", "count"), idade_max_s=("idade_dado_s", "max"),
             primeira=("timestamp_utc", "min")).round(0).to_dict("index"),
         "maior_lacuna_por_tag_avaliacao": aval_df.groupby("tag")["intervalo_max_s"].max().dropna().to_dict(),
@@ -464,6 +492,11 @@ def main() -> None:
             f"{f} | {ua}": n for (f, ua), n in sem_header.groupby(["feature", "user_agent"]).size().items()},
         "erros_404_por_tag": erros_4xx[erros_4xx["status_code"] == 404]["tag"].value_counts().to_dict(),
         "erros_5xx_baseline": int((base_df["status_code"] >= 500).sum()),
+        "severidade_leitura_atual_baseline": base_df[base_df["rota"] == ROTA_LEITURA]["severidade"]
+        .value_counts().to_dict(),
+        "severidade_leitura_atual_avaliacao": aval_df[aval_df["rota"] == ROTA_LEITURA]["severidade"]
+        .value_counts().to_dict(),
+        "historico_real": estatisticas_historico_real(),
     }
     resultados = {
         "gerado_em": datetime.now().astimezone().isoformat(timespec="seconds"),
