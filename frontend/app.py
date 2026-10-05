@@ -25,6 +25,8 @@ COR_SEVERIDADE = {
 COR_STATUS = {"dentro": "Dentro", "alerta": "Alerta", "critico": "Crítico",
               "informativo": "Informativo", "sem dados": "Sem dados"}
 SERIES = ["#2a78d6", "#eb6834", "#1baf7a"]
+GRANDEZAS = [("velocidade_mm_s", "Vibração", "mm/s"), ("aceleracao_g", "Aceleração", "g"),
+             ("temperatura_c", "Temperatura", "°C")]
 COR_ALERTA, COR_CRITICO = "#fab219", "#d03b3b"
 
 st.set_page_config(page_title="Forzy | Sensores", layout="wide")
@@ -86,26 +88,31 @@ with aba_leitura:
             st.session_state.leitura_tag = tag
         leitura = st.session_state.get("leitura")
         if leitura:
-            c1, c2, c3 = st.columns(3)
-            valor = "sem valor" if leitura["valor"] is None else f"{br(leitura['valor'], 2)} {leitura['unidade']}"
-            c1.metric("Valor", valor)
-            c2.markdown("Severidade")
-            c2.markdown(selo(leitura["severidade"]), unsafe_allow_html=True)
-            c3.metric("Idade do dado", f"{leitura['idade_s']:.0f} s")
-            st.caption(f"Leitura de {leitura['timestamp_leitura']} | limiar de alerta {br(leitura['limite_alerta'])} "
-                       f"{leitura['unidade']}, crítico {br(leitura['limite_critico'])} {leitura['unidade']}")
-            if leitura["desatualizado"]:
-                st.warning("Dado desatualizado: a última leitura passou do limite de freshness. "
-                           "A severidade mostrada não deve ser usada para decisão.")
-            if leitura["qualidade"] is None:
-                st.warning("O campo de qualidade veio vazio nesta leitura.")
+            sev = leitura["severidade_por_grandeza"]
+            colunas = st.columns(4)
+            for coluna, (campo, rotulo, unidade) in zip(colunas, GRANDEZAS):
+                valor = leitura[campo]
+                coluna.metric(rotulo, "inválido" if valor is None else f"{br(valor, 2)} {unidade}")
+                if sev[campo]:
+                    coluna.markdown(selo(sev[campo]), unsafe_allow_html=True)
+            colunas[3].metric("Idade do dado", f"{leitura['idade_s']:.0f} s")
+            st.markdown(f"Severidade geral: {selo(leitura['severidade'])}", unsafe_allow_html=True)
+            estado = "ligado" if leitura["motor_ligado"] else "desligado (vibração abaixo de 0,3 mm/s)"
+            st.caption(f"{leitura['descricao']} | componente {leitura['componente_id']} | motor {estado} | "
+                       f"leitura de {leitura['timestamp_leitura']}")
+            if leitura["offline"]:
+                st.warning("Sensor offline: a última leitura tem mais de 30 s. Pelo circuit breaker do Metric "
+                           "Contract, a severidade mostrada não deve ser usada para decisão.")
+            if not leitura["motor_ligado"]:
+                st.info("Motor desligado: o diagnóstico de anomalia não se aplica a esta leitura.")
 
 with aba_historico:
     if tags:
-        c1, c2, c3 = st.columns(3)
+        c1, c2, c3, c4 = st.columns(4)
         tag_h = c1.selectbox("Sensor", tags, key="tag_hist")
-        horas = c2.selectbox("Período", [1, 6, 24], format_func=lambda h: f"últimas {h} h")
-        limite = c3.number_input("Máximo de leituras", 10, 5000, value=240, step=10)
+        grandeza = c2.selectbox("Grandeza", GRANDEZAS, format_func=lambda g: g[1], key="grandeza_hist")
+        horas = c3.selectbox("Período", [1, 6, 24], format_func=lambda h: f"últimas {h} h")
+        limite = c4.number_input("Máximo de leituras", 10, 5000, value=360, step=10)
         chave = (tag_h, horas, limite)
         if st.button("Consultar", key="btn_hist") or st.session_state.get("hist_chave") != chave:
             fim = datetime.now(timezone.utc)
@@ -113,16 +120,18 @@ with aba_historico:
             st.session_state.hist_chave = chave
         hist = st.session_state.get("hist")
         if hist and hist["leituras"]:
-            df = pd.DataFrame(hist["leituras"])
+            df = pd.DataFrame(hist["leituras"]).drop(columns=["severidade_por_grandeza"])
             df["timestamp_leitura"] = pd.to_datetime(df["timestamp_leitura"])
-            sensor = next(s for s in sensores if s["tag"] == hist["tag"])
+            campo, rotulo, unidade = grandeza
+            limites = next(s for s in sensores if s["tag"] == hist["tag"])["limites"][campo]
             linha = (alt.Chart(df).mark_line(color=SERIES[0], strokeWidth=2)
                      .encode(x=alt.X("timestamp_leitura:T", title="Horário (UTC)"),
-                             y=alt.Y("valor:Q", title=f"Valor ({hist['unidade']})", scale=alt.Scale(zero=False)),
-                             tooltip=["timestamp_leitura:T", "valor:Q", "severidade:N"]))
-            st.altair_chart(alt.layer(linha, *linhas_limiar(sensor["limite_alerta"], sensor["limite_critico"])),
+                             y=alt.Y(f"{campo}:Q", title=f"{rotulo} ({unidade})"),
+                             tooltip=["timestamp_leitura:T", f"{campo}:Q", "severidade:N"]))
+            st.altair_chart(alt.layer(linha, *linhas_limiar(limites["alerta"], limites["critico"])),
                             width="stretch")
-            st.caption(f"{hist['quantidade']} leituras. Linhas tracejadas: limiar de alerta (amarelo) e crítico (vermelho).")
+            st.caption(f"{hist['quantidade']} leituras, uma a cada 10 s quando o poller consegue ler. Linhas "
+                       "tracejadas: limiar de alerta (amarelo) e crítico (vermelho) do Metric Contract.")
             st.dataframe(df, width="stretch", hide_index=True)
         elif hist:
             st.info("Nenhuma leitura no período.")
@@ -223,7 +232,7 @@ def painel_observabilidade():
                       .encode(x=alt.X("timestamp_utc:T", title="Horário (UTC)"),
                               y=alt.Y("idade_dado_s:Q", title="Idade (s)"),
                               tooltip=["timestamp_utc:T", "tag", alt.Tooltip("idade_dado_s:Q", format=".0f")]))
-            st.altair_chart(alt.layer(pontos, *linhas_limiar(90, 300)), width="stretch")
+            st.altair_chart(alt.layer(pontos, *linhas_limiar(30, 300)), width="stretch")
     with g6:
         st.markdown("Uso por feature")
         uso = df["feature"].value_counts().reset_index()
