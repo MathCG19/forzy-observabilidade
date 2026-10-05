@@ -1,17 +1,17 @@
 id,indicador,valor,unidade,baseline,limiar_alerta,limiar_critico,direcao,status
-latencia_p95,Latência p95,40.8,ms,44.03,250.0,1000.0,maior_pior,dentro
-latencia_p50,Latência p50,15.32,ms,17.01,80.0,300.0,maior_pior,dentro
-latencia_p99,Latência p99,442.72,ms,75.99,800.0,2000.0,maior_pior,dentro
-erro_5xx,Taxa de erro 5xx,0.17,%,0.67,0.5,1.0,maior_pior,dentro
+latencia_p95,Latência p95,40.05,ms,50.55,250.0,1000.0,maior_pior,dentro
+latencia_p50,Latência p50,15.33,ms,17.61,80.0,300.0,maior_pior,dentro
+latencia_p99,Latência p99,517.13,ms,120.56,800.0,2000.0,maior_pior,dentro
+erro_5xx,Taxa de erro 5xx,0.0,%,0.0,0.5,1.0,maior_pior,dentro
 erro_4xx,Taxa de erro 4xx,9.5,%,0.0,3.0,8.0,maior_pior,critico
-disponibilidade,Disponibilidade,99.83,%,99.33,99.5,99.0,menor_pior,dentro
-freshness_p95,Freshness (idade do dado),285.7,s,44.0,90.0,300.0,maior_pior,alerta
-freshness_no_prazo,Taxa de completude de freshness,80.42,%,100.0,95.0,90.0,menor_pior,critico
-completude_payload,Completude do payload,99.4,%,99.3,98.0,95.0,menor_pior,dentro
-intervalo_atualizacao,Tempo de atualização,32.5,s,32.4,36.0,45.0,maior_pior,dentro
-maior_lacuna,Maior lacuna no histórico,330.0,s,330.0,120.0,300.0,maior_pior,critico
+disponibilidade,Disponibilidade,100.0,%,100.0,99.5,99.0,menor_pior,dentro
+freshness_p95,Freshness (idade do dado),10.1,s,9.9,30.0,300.0,maior_pior,dentro
+freshness_no_prazo,Taxa de completude de freshness,100.0,%,100.0,95.0,90.0,menor_pior,dentro
+completude_payload,Completude do payload,100.0,%,100.0,98.0,95.0,menor_pior,dentro
+intervalo_atualizacao,Tempo de atualização,10.3,s,10.4,12.0,15.0,maior_pior,dentro
+maior_lacuna,Maior lacuna no histórico,160.0,s,160.0,30.0,300.0,maior_pior,alerta
 cobertura_headers,Cobertura de headers (rastreabilidade),90.17,%,100.0,95.0,90.0,menor_pior,alerta
-throughput,Volume (throughput),75.31,chamadas/min,60.23,30.115,12.046,menor_pior,dentro
+throughput,Volume (throughput),75.29,chamadas/min,60.2,30.1,12.040000000000001,menor_pior,dentro
 uso_feature,Uso por funcionalidade,"{'tela-leitura-atual': 296, 'tela-historico': 164, 'integracao-mes': 98, 'ausente': 42}",chamadas,,,,maior_pior,informativo
 sessoes_unicas,Sessões únicas,11,sessões,6.0,,,maior_pior,informativo
-proporcao_critica,Proporção de leituras críticas,0.0,%,0.0,5.0,10.0,maior_pior,dentro
+proporcao_critica,Proporção de leituras críticas,80.47,%,0.0,5.0,10.0,maior_pior,critico
