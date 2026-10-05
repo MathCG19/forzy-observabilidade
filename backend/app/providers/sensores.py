@@ -1,52 +1,57 @@
 """Provider de Sensores do Forzy Digital Twin.
 
-As leituras são simuladas de forma determinística: a mesma tag no mesmo instante
-sempre gera o mesmo valor, então o histórico é estável entre chamadas. O simulador
-reproduz problemas reais de coleta (amostras perdidas, coletor parado por alguns
-minutos, campos nulos) para que os indicadores de qualidade de dado tenham o que medir.
+Os valores são reais: vêm do histórico capturado dos dois sensores do motor WEG W22
+(portas 1 e 2 do mestre IO-Link) em 19/05/2026, o mesmo arquivo que o modo demo do
+forzy-api repete. O que é simulado é a coleta: um poller lê o valor corrente de cada
+sensor a cada 10 s, como o forzy_poller.py do projeto, e às vezes falha (túnel do
+endpoint fora do ar, poll perdido). O histórico é repetido em laço sobre o relógio atual.
 """
 
+import bisect
+import csv
 import math
 import random
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import lru_cache
+from pathlib import Path
+
+ARQUIVO_HISTORICO = Path(__file__).resolve().parent / "dados" / "historico_forzy_2026-05-19.csv"
+
+INTERVALO_S = 10            # poll_loop do forzy_poller.py
+JANELA_PARADA_S = 240
+PROB_PARADA = 0.10          # chance de o endpoint ficar fora do ar numa janela de 4 min
+PROB_POLL_PERDIDO = 0.02
+ATRASO_GRAVACAO_S = 0.5     # tempo entre o poll e a linha estar disponível para leitura
+
+# Faixas físicas válidas e limiares do Metric Contract do CS3 (seções 7.4 e 7.5).
+FAIXA_VALIDA = {"velocidade_mm_s": (0, 50), "aceleracao_g": (0, 20), "temperatura_c": (-10, 150)}
+PISO_OPERACAO_MM_S = 0.3
 
 
 @dataclass(frozen=True)
 class Sensor:
     tag: str
     descricao: str
-    unidade: str
-    base: float
-    amplitude: float
-    limite_alerta: float
-    limite_critico: float
+    componente_id: int
+    porta: int
+    limites: dict = field(default_factory=lambda: {
+        "velocidade_mm_s": (1.8, 4.5),   # ISO 10816-1 Classe I, zonas C e D
+        "aceleracao_g": (2.0, 4.0),
+        "temperatura_c": (70.0, 90.0),
+    })
 
 
 SENSORES: dict[str, Sensor] = {
-    s.tag: s
-    for s in [
-        Sensor("TT-101", "Temperatura do mancal do motor M-01", "°C", 68.0, 5.0, 80.0, 90.0),
-        Sensor("PT-201", "Pressão de descarga da bomba B-02", "bar", 6.2, 0.45, 7.5, 8.2),
-        Sensor("VT-301", "Vibração do redutor R-03", "mm/s", 3.0, 0.9, 4.5, 7.1),
-        Sensor("CT-501", "Corrente do motor M-05", "A", 42.0, 3.0, 50.0, 55.0),
-    ]
+    "S1": Sensor("S1", "Motor WEG W22 - Unidade S1", componente_id=2, porta=1),
+    "S2": Sensor("S2", "Motor WEG W22 - Unidade S2", componente_id=3, porta=2),
 }
 
-INTERVALO_S = 30
-JANELA_PARADA_S = 240
-PROB_PARADA = 0.10
-PROB_AMOSTRA_PERDIDA = 0.02
-PROB_QUALIDADE_NULA = 0.03
-PROB_VALOR_NULO = 0.01
-
-CAMPOS_LEITURA = (
-    "tag", "descricao", "unidade", "valor", "timestamp_leitura",
-    "severidade", "qualidade", "limite_alerta", "limite_critico",
-)
-CAMPOS_HISTORICO = ("timestamp_leitura", "valor", "severidade", "qualidade")
+GRANDEZAS = ("velocidade_mm_s", "aceleracao_g", "temperatura_c")
+CAMPOS_LEITURA = ("tag", "descricao", "timestamp_leitura", *GRANDEZAS, "severidade")
+CAMPOS_HISTORICO = ("timestamp_leitura", *GRANDEZAS, "severidade")
+ORDEM_SEVERIDADE = {"normal": 0, "alerta": 1, "critico": 2}
 
 
 class TagNaoEncontrada(Exception):
@@ -57,66 +62,77 @@ class FonteIndisponivel(Exception):
     pass
 
 
-def classificar(sensor: Sensor, valor: float | None) -> str:
+@lru_cache(maxsize=1)
+def carregar_historico() -> tuple[list[float], dict[int, list[tuple[float, float, float]]]]:
+    """Segundos desde a primeira linha e, por porta, (velocidade, aceleração, temperatura)."""
+    tempos, portas = [], {1: [], 2: []}
+    with ARQUIVO_HISTORICO.open(encoding="utf-8") as f:
+        linhas = csv.reader(f, delimiter=";")
+        for _ in range(3):  # cabeçalho do exportador IO-Link tem três linhas
+            next(linhas)
+        inicio = None
+        for linha in linhas:
+            ts = datetime.fromisoformat(linha[0]).timestamp()
+            inicio = inicio if inicio is not None else ts
+            tempos.append(ts - inicio)
+            v = [float(x) for x in linha[3:9]]
+            portas[1].append((v[0], v[1], v[2]))
+            portas[2].append((v[3], v[4], v[5]))
+    return tempos, portas
+
+
+def instante_do_historico(texto_hhmm: str) -> float:
+    """Converte "13:38" (hora do histórico de 19/05) em segundos desde a primeira linha."""
+    with ARQUIVO_HISTORICO.open(encoding="utf-8") as f:
+        for _ in range(3):
+            f.readline()
+        primeira = datetime.fromisoformat(f.readline().split(";")[0])
+    h, m = (int(x) for x in texto_hhmm.split(":")[:2])
+    alvo = primeira.replace(hour=h, minute=m, second=0, microsecond=0)
+    return max((alvo - primeira).total_seconds(), 0.0)
+
+
+def _severidade(valor: float | None, limites: tuple[float, float]) -> str | None:
     if valor is None:
-        return "indeterminada"
-    if valor >= sensor.limite_critico:
+        return None
+    alerta, critico = limites
+    if valor >= critico:
         return "critico"
-    if valor >= sensor.limite_alerta:
+    if valor >= alerta:
         return "alerta"
     return "normal"
 
 
+def classificar(sensor: Sensor, valores: dict) -> dict:
+    por_grandeza = {g: _severidade(valores[g], sensor.limites[g]) for g in GRANDEZAS}
+    validas = [s for s in por_grandeza.values() if s]
+    geral = max(validas, key=ORDEM_SEVERIDADE.get) if validas else "indeterminada"
+    return {"severidade": geral, "severidade_por_grandeza": por_grandeza}
+
+
+def _validar(valor: float, grandeza: str) -> float | None:
+    minimo, maximo = FAIXA_VALIDA[grandeza]
+    return valor if minimo <= valor <= maximo else None
+
+
 @lru_cache(maxsize=4096)
-def _parada(tag: str, janela: int) -> tuple[int, int] | None:
-    """Intervalo [inicio, fim) em que o coletor ficou parado dentro da janela, se ficou."""
-    rng = random.Random(f"{tag}:parada:{janela}")
+def _parada(janela: int) -> tuple[int, int] | None:
+    # A parada é do endpoint, então derruba os dois sensores ao mesmo tempo.
+    rng = random.Random(f"parada:{janela}")
     if rng.random() >= PROB_PARADA:
         return None
     inicio = janela * JANELA_PARADA_S + rng.randint(0, JANELA_PARADA_S - 60)
     return inicio, inicio + rng.randint(60, 420)
 
 
-def _existe(tag: str, slot: int) -> bool:
+def _poll_ok(tag: str, slot: int) -> bool:
     ts = slot * INTERVALO_S
     janela = ts // JANELA_PARADA_S
-    # Uma parada pode começar numa janela e invadir as duas seguintes.
     for j in (janela, janela - 1, janela - 2):
-        parada = _parada(tag, j)
+        parada = _parada(j)
         if parada and parada[0] <= ts < parada[1]:
             return False
-    return random.Random(f"{tag}:perda:{slot}").random() >= PROB_AMOSTRA_PERDIDA
-
-
-def _publicada(tag: str, slot: int, agora: float) -> bool:
-    # Cada amostra leva de 3 a 20 s para sair do coletor e ficar disponível.
-    atraso = random.Random(f"{tag}:atraso:{slot}").uniform(3, 20)
-    return slot * INTERVALO_S + atraso <= agora
-
-
-def _gerar(sensor: Sensor, slot: int) -> dict:
-    rng = random.Random(f"{sensor.tag}:valor:{slot}")
-    valor = sensor.base + sensor.amplitude * math.sin(2 * math.pi * slot / 120)
-    valor += rng.gauss(0, sensor.amplitude * 0.2)
-    sorteio = rng.random()
-    if sorteio < 0.015:
-        valor += sensor.amplitude * rng.uniform(4.0, 5.0)
-    elif sorteio < 0.07:
-        valor += sensor.amplitude * rng.uniform(2.0, 3.0)
-
-    valor_final: float | None = round(valor, 2)
-    if rng.random() < PROB_VALOR_NULO:
-        valor_final = None
-    qualidade: str | None = "boa" if valor_final is not None else "ruim"
-    if rng.random() < PROB_QUALIDADE_NULA:
-        qualidade = None
-
-    return {
-        "timestamp_leitura": datetime.fromtimestamp(slot * INTERVALO_S, tz=timezone.utc),
-        "valor": valor_final,
-        "severidade": classificar(sensor, valor_final),
-        "qualidade": qualidade,
-    }
+    return random.Random(f"{tag}:poll:{slot}").random() >= PROB_POLL_PERDIDO
 
 
 def completude(payload: dict, campos: tuple[str, ...]) -> float:
@@ -124,62 +140,84 @@ def completude(payload: dict, campos: tuple[str, ...]) -> float:
 
 
 class SensoresProvider:
-    def __init__(self, simular_latencia: bool = True, prob_falha: float = 0.0, relogio=time.time):
+    def __init__(self, simular_latencia: bool = True, prob_falha: float = 0.0, relogio=time.time,
+                 inicio_replay_s: float = 0.0, ancora: float | None = None):
         self.simular_latencia = simular_latencia
         self.prob_falha = prob_falha
         self.relogio = relogio
         self._rng = random.Random()
+        self.tempos, self.portas = carregar_historico()
+        self.periodo = math.ceil(self.tempos[-1] / INTERVALO_S) * INTERVALO_S + INTERVALO_S
+        # No instante `ancora` o replay está em `inicio_replay_s` do histórico.
+        ancora = relogio() if ancora is None else ancora
+        self.origem = ancora - inicio_replay_s
 
     def listar(self) -> list[Sensor]:
         return list(SENSORES.values())
 
-    def _sensor(self, tag: str) -> Sensor:
+    def sensor(self, tag: str) -> Sensor:
         sensor = SENSORES.get(tag.upper())
         if sensor is None:
             raise TagNaoEncontrada(tag)
         return sensor
 
     def _consultar_fonte(self, peso: float = 1.0) -> None:
-        """Simula o custo de ir ao historiador: tempo de resposta variável e falha ocasional."""
+        """Simula o custo da consulta ao banco: tempo variável e falha ocasional."""
         if self.simular_latencia:
             espera = self._rng.lognormvariate(math.log(12), 0.5) * peso
             if self._rng.random() < 0.02:
                 espera += self._rng.uniform(250, 600)
             time.sleep(espera / 1000)
         if self._rng.random() < self.prob_falha:
-            raise FonteIndisponivel("historiador de sensores não respondeu")
+            raise FonteIndisponivel("banco de leituras não respondeu")
+
+    def _valores(self, sensor: Sensor, slot: int) -> dict:
+        """Valor corrente do sensor no instante do poll (última linha do histórico até ali)."""
+        posicao = (slot * INTERVALO_S - self.origem) % self.periodo
+        i = bisect.bisect_right(self.tempos, posicao) - 1
+        v, a, t = self.portas[sensor.porta][i]  # i = -1 cai na última linha, fechando o laço
+        return {
+            "velocidade_mm_s": _validar(v, "velocidade_mm_s"),
+            "aceleracao_g": _validar(a, "aceleracao_g"),
+            "temperatura_c": _validar(t, "temperatura_c"),
+        }
+
+    def _leitura(self, sensor: Sensor, slot: int) -> dict:
+        valores = self._valores(sensor, slot)
+        vel = valores["velocidade_mm_s"]
+        return {
+            "timestamp_leitura": datetime.fromtimestamp(slot * INTERVALO_S, tz=timezone.utc),
+            **valores,
+            "motor_ligado": None if vel is None else vel >= PISO_OPERACAO_MM_S,
+            **classificar(sensor, valores),
+        }
+
+    def _disponivel(self, sensor: Sensor, slot: int, agora: float) -> bool:
+        return slot * INTERVALO_S + ATRASO_GRAVACAO_S <= agora and _poll_ok(sensor.tag, slot)
 
     def leitura_atual(self, tag: str) -> dict:
-        sensor = self._sensor(tag)
+        sensor = self.sensor(tag)
         self._consultar_fonte()
         agora = self.relogio()
         slot = int(agora // INTERVALO_S)
-        for _ in range(2880):
-            if _existe(sensor.tag, slot) and _publicada(sensor.tag, slot, agora):
+        for _ in range(8640):
+            if self._disponivel(sensor, slot, agora):
                 break
             slot -= 1
-        leitura = _gerar(sensor, slot)
-        return {
-            "tag": sensor.tag,
-            "descricao": sensor.descricao,
-            "unidade": sensor.unidade,
-            **leitura,
-            "limite_alerta": sensor.limite_alerta,
-            "limite_critico": sensor.limite_critico,
-        }
+        return {"tag": sensor.tag, "descricao": sensor.descricao, "componente_id": sensor.componente_id,
+                **self._leitura(sensor, slot)}
 
     def historico(self, tag: str, inicio: datetime, fim: datetime, limite: int) -> list[dict]:
-        """Devolve as `limite` leituras mais recentes dentro de [inicio, fim], em ordem cronológica."""
-        sensor = self._sensor(tag)
+        """As `limite` leituras mais recentes dentro de [inicio, fim], em ordem cronológica."""
+        sensor = self.sensor(tag)
         self._consultar_fonte(peso=1.6)
         agora = self.relogio()
-        ts_fim = min(fim.timestamp(), agora)
-        slot = int(ts_fim // INTERVALO_S)
+        slot = int(min(fim.timestamp(), agora) // INTERVALO_S)
         slot_inicio = math.ceil(inicio.timestamp() / INTERVALO_S)
         leituras = []
         while slot >= slot_inicio and len(leituras) < limite:
-            if _existe(sensor.tag, slot) and _publicada(sensor.tag, slot, agora):
-                leituras.append(_gerar(sensor, slot))
+            if self._disponivel(sensor, slot, agora):
+                leituras.append(self._leitura(sensor, slot))
             slot -= 1
         leituras.reverse()
         return leituras
