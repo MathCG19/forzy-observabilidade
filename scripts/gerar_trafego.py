@@ -24,7 +24,7 @@ import time
 import uuid
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
@@ -133,11 +133,12 @@ def main() -> None:
     rng = random.Random(args.seed)
     plano = montar_plano(args.cenario, args.chamadas, rng)
 
-    # Margem de 1 s nas pontas para que a janela anotada contenha todos os registros.
-    inicio = datetime.now(timezone.utc) - timedelta(seconds=1)
+    # O início é marcado antes da primeira chamada e o fim depois da última, então todo
+    # registro desta execução cai dentro da janela sem precisar de margem.
+    inicio = datetime.now(timezone.utc)
     print(f"Cenário {args.cenario}: {args.chamadas} chamadas em ~{args.duracao:.0f} s, concorrência {concorrencia}")
     resultados = executar(base, plano, args.duracao, concorrencia)
-    fim = datetime.now(timezone.utc) + timedelta(seconds=1)
+    fim = datetime.now(timezone.utc)
 
     anotar_execucao({
         "cenario": args.cenario,
