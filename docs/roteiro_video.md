@@ -14,8 +14,8 @@ Antes de gravar: apagar `data/observabilidade.db` se quiser começar do zero, de
 - Terminal 1: `uvicorn app.main:app --app-dir backend --port 8000`.
 - Abrir `http://127.0.0.1:8000/docs`.
 - Mostrar as rotas de sensores e de observabilidade.
-- Executar a leitura atual da TT-101 pelo próprio /docs (sem headers, de propósito).
-- Executar com uma tag que não existe e mostrar o 404.
+- Executar a leitura atual do S1 pelo próprio /docs (sem headers, de propósito).
+- Executar com um sensor que não existe (S9) e mostrar o 404.
 
 ## 3. Script de consumo (30 s)
 
@@ -26,8 +26,9 @@ Antes de gravar: apagar `data/observabilidade.db` se quiser começar do zero, de
 
 - `streamlit run frontend/app.py`.
 - Barra lateral: session_id da sessão.
-- Aba Leitura atual: trocar de sensor, mostrar a cor da severidade e a idade do dado.
-- Aba Histórico: mudar o período, mostrar o gráfico com as linhas de limiar e a tabela.
+- Aba Leitura atual: trocar entre S1 e S2, mostrar vibração, aceleração e temperatura com a cor da severidade, a idade do dado e o aviso de motor desligado ou de sensor offline.
+- Aba Histórico: trocar a grandeza, mostrar o gráfico com as linhas de limiar da Sprint 3 e a tabela.
+- Comentar que os valores são o histórico real de 19/05 e que só a coleta é simulada.
 - Aba Observabilidade: cards, tabela de conformidade, filtrar pelo session_id da barra lateral e mostrar que as chamadas que acabamos de fazer estão lá com `tela-leitura-atual` e `tela-historico`.
 
 ## 5. Gerador de tráfego com a aba atualizando (50 s)
@@ -35,6 +36,7 @@ Antes de gravar: apagar `data/observabilidade.db` se quiser começar do zero, de
 - Ligar o "Atualizar a cada 5 s" na aba Observabilidade.
 - Terminal 2: `python scripts/gerar_trafego.py --cenario avaliacao --chamadas 200 --duracao 90`.
 - Mostrar o volume subindo, a cobertura de headers caindo por causa do cliente legado e os 404 aparecendo no gráfico de status.
+- Se o motor entrar em operação no replay, mostrar a proporção de leituras críticas subindo (platô de 6,6 mm/s cai na zona D).
 - Comentar por que chamada sem header não é recusada.
 
 ## 6. Registro no banco (30 s)

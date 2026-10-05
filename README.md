@@ -21,7 +21,9 @@ flowchart LR
     DB --> AN[governanca/analise.py<br>figuras e conformidade]
 ```
 
-O provider de Sensores aqui é simulado. Ele gera leituras determinísticas para quatro tags (TT-101, PT-201, VT-301, CT-501) com amostragem nominal de 30 s e reproduz falhas reais de coleta: amostras perdidas, coletor parado por alguns minutos, campos nulos, consultas lentas e falha ocasional da fonte (503). Sem isso os indicadores de qualidade de dado ficariam sempre perfeitos e não haveria o que governar.
+O provider de Sensores serve os dois sensores do motor WEG W22 do projeto, S1 (componente 2) e S2 (componente 3), com velocidade de vibração (mm/s), aceleração (g) e temperatura (°C). Os valores são reais: vêm do histórico exportado do mestre IO-Link em 19/05/2026 (`backend/app/providers/dados/historico_forzy_2026-05-19.csv`), o mesmo arquivo que o modo demo do forzy-api repete, porque o hardware da Forzy hoje devolve dado zerado. O provider imita o `forzy_poller.py`: a cada 10 s lê o último valor de cada sensor e grava a leitura, repetindo o histórico em laço sobre o relógio atual. O que é simulado é a coleta (endpoint fora do ar por alguns minutos, poll perdido) e o custo da consulta (latência variável e 503 ocasional). Sem essas falhas os indicadores de qualidade de dado ficariam sempre perfeitos e não haveria o que governar.
+
+Os limiares de severidade são os do Metric Contract da Sprint 3: vibração de 1,8 e 4,5 mm/s (ISO 10816-1 Classe I), temperatura de 70 e 90 °C, aceleração de 2 e 4 g. Abaixo de 0,3 mm/s o motor é considerado desligado. O sensor é marcado como offline quando a última leitura tem mais de 30 s.
 
 Fora do escopo deste checkpoint: autenticação e os providers de Equipamentos e Plantas (ficam para a Sprint 4).
 
@@ -33,22 +35,22 @@ A API não rejeita chamada sem `X-Session-Id` ou `X-Feature`. A chamada é atend
 
 | Rota | O que devolve |
 |---|---|
-| `GET /v1/sensores` | tags disponíveis com unidade e limiares |
-| `GET /v1/sensores/{tag}/leitura-atual` | valor, timestamp da leitura, severidade (`normal`, `alerta`, `critico`, `indeterminada`), idade do dado e se está desatualizado |
+| `GET /v1/sensores` | sensores S1 e S2 com os limiares de cada grandeza |
+| `GET /v1/sensores/{tag}/leitura-atual` | vibração, aceleração, temperatura, timestamp da leitura, severidade por grandeza e geral (`normal`, `alerta`, `critico`, `indeterminada`), motor ligado ou não, idade do dado e se o sensor está offline |
 | `GET /v1/sensores/{tag}/historico?inicio=&fim=&limite=` | leituras do intervalo em ordem cronológica (padrão: última hora, 120 leituras) |
 | `GET /v1/observabilidade?feature=&session_id=&desde=&limite=` | registros das chamadas às rotas de sensores |
 | `GET /v1/observabilidade/resumo?desde=&ate=` | indicadores agregados e status de cada um frente ao contrato |
 
-Tag inexistente devolve 404 com a mensagem `Sensor 'XX' não encontrado`. Parâmetro inválido devolve 422. A documentação interativa fica em `http://127.0.0.1:8000/docs`.
+Sensor inexistente devolve 404 com a mensagem `Sensor 'S9' não encontrado`. Parâmetro inválido devolve 422. A documentação interativa fica em `http://127.0.0.1:8000/docs`.
 
 Exemplos:
 
 ```bash
 curl -H "X-Session-Id: 3f2c9a10-0000-4000-8000-000000000001" -H "X-Feature: teste-curl" \
-     http://127.0.0.1:8000/v1/sensores/TT-101/leitura-atual
+     http://127.0.0.1:8000/v1/sensores/S1/leitura-atual
 
 curl -H "X-Session-Id: 3f2c9a10-0000-4000-8000-000000000001" -H "X-Feature: teste-curl" \
-     "http://127.0.0.1:8000/v1/sensores/PT-201/historico?inicio=2026-10-04T12:00:00Z&fim=2026-10-04T13:00:00Z&limite=50"
+     "http://127.0.0.1:8000/v1/sensores/S2/historico?inicio=2026-10-04T12:00:00Z&fim=2026-10-04T13:00:00Z&limite=50"
 
 curl "http://127.0.0.1:8000/v1/observabilidade?feature=teste-curl&limite=20"
 
@@ -70,7 +72,7 @@ curl http://127.0.0.1:8000/v1/observabilidade/resumo
 | `completude` | proporção de campos não nulos no payload (0 a 1) |
 | `qtd_registros` | no histórico, quantas leituras voltaram |
 | `intervalo_medio_s`, `intervalo_max_s` | no histórico, intervalo médio e maior intervalo entre leituras consecutivas |
-| `severidade` | na leitura atual, severidade devolvida |
+| `severidade` | na leitura atual, severidade geral devolvida |
 | `tamanho_resposta_bytes` | tamanho do corpo da resposta |
 | `erro` | mensagem de erro quando o status é 4xx ou 5xx |
 | `user_agent` | header User-Agent do cliente |
@@ -108,7 +110,7 @@ A URL da API usada pelo front e pelos scripts vem da variável `FORZY_API_URL` (
 Script de consumo dos três endpoints:
 
 ```bash
-python scripts/consumo_requests.py --tag TT-101
+python scripts/consumo_requests.py --tag S1
 ```
 
 Gerar tráfego para a análise (com a API no ar). O cenário `baseline` mede a operação normal e o `avaliacao` mistura clientes sem header, tags inválidas e mais concorrência:
@@ -136,7 +138,9 @@ Testes:
 pytest
 ```
 
-Variáveis opcionais da API: `FORZY_DB_PATH` (caminho do SQLite), `FORZY_SIMULAR_LATENCIA` (`0` desliga a latência simulada), `FORZY_PROB_FALHA` (probabilidade de 503, padrão 0.004), `FORZY_LIMITE_FRESHNESS_S` (padrão 300).
+Variáveis opcionais da API: `FORZY_DB_PATH` (caminho do SQLite), `FORZY_REPLAY_INICIO` (hora do histórico de 19/05 em que o replay começa quando a API sobe, padrão `13:38`, logo antes de uma partida do motor), `FORZY_SIMULAR_LATENCIA` (`0` desliga a latência simulada), `FORZY_PROB_FALHA` (probabilidade de 503, padrão 0.004), `FORZY_LIMITE_FRESHNESS_S` (padrão 30).
+
+Para repetir a análise do documento, suba a API e rode os dois cenários logo em seguida: com o replay começando em 13:38, a baseline pega o motor parado e a avaliação pega a partida e a operação.
 
 ## Estrutura
 
