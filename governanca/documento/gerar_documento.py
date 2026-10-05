@@ -22,6 +22,7 @@ sys.path.insert(0, str(RAIZ / "backend"))
 from app.observability.metrics import classificar  # noqa: E402
 FIG = RAIZ / "governanca" / "figuras"
 SAIDA = RAIZ / "governanca" / "documento" / "Checkpoint_Governanca_Observabilidade.docx"
+SETTINGS_REPLAY = "variável FORZY_REPLAY_INICIO"
 
 R = json.loads((RAIZ / "governanca" / "resultados" / "resultados.json").read_text(encoding="utf-8"))
 CONTRATO = yaml.safe_load((RAIZ / "governanca" / "metric_contract.yaml").read_text(encoding="utf-8"))
@@ -117,23 +118,26 @@ def resumo(doc):
     criticos = ", ".join(c["indicador"].lower() for c in s["critico"]) or "nenhum"
     texto = (
         "Este trabalho define e valida um contrato mínimo de observabilidade para o endpoint de sensores do "
-        "Forzy Digital Twin. O grupo expôs o provider de Sensores como uma API FastAPI com rotas de leitura atual, "
+        "Forzy Digital Twin, que acompanha os sensores S1 e S2 de um motor WEG W22. O grupo expôs o provider de "
+        "Sensores como uma API FastAPI com rotas de leitura atual, "
         "histórico e observabilidade, e implementou um middleware que grava em SQLite, a cada chamada, os headers "
         "de contexto X-Session-Id e X-Feature, o instante em UTC, a latência, o código de status, a idade do dado "
         "e a completude do payload. A partir desses campos mapeamos "
         f"{len(CONTRATO['indicadores'])} indicadores, entre eles latência p95, disponibilidade, freshness, taxa de "
         "completude de freshness, tempo de atualização e cobertura de headers. Cada indicador recebeu definição, "
         "fórmula, baseline, limiar de alerta, limiar crítico, visualização recomendada e ação de resposta, "
-        "reunidos num arquivo YAML versionado junto com o código. A baseline foi medida sobre "
+        "reunidos num arquivo YAML versionado junto com o código e alinhados ao Metric Contract da Sprint 3. As "
+        "leituras servidas pela API vêm do histórico real dos dois sensores, repetido sobre o relógio atual, e só a "
+        "coleta é simulada. A baseline foi medida sobre "
         f"{br(DET['chamadas_baseline'], 0)} chamadas de operação normal, sem problemas de cliente, e a conformidade foi avaliada "
         f"sobre {br(DET['chamadas_avaliacao'], 0)} chamadas de um cenário misto, que inclui um cliente legado sem "
-        "headers, consultas a tags inexistentes e maior concorrência. Na avaliação, "
+        "headers, consultas a sensores inexistentes e maior concorrência. Na avaliação, "
         f"{len(s['dentro'])} indicadores ficaram dentro dos limiares, {len(s['alerta'])} em alerta e "
         f"{len(s['critico'])} em nível crítico ({criticos}). A interface em Streamlit consome os três endpoints "
         "com a biblioteca requests e mostra os indicadores com os mesmos gráficos propostos neste documento. "
-        "Os registros permitiram identificar o cliente que chamava sem contexto pelo user agent, separar erros "
-        "de cliente de falhas da fonte de dados e medir atrasos do coletor que a interface sozinha não "
-        "mostraria."
+        "Os registros permitiram identificar pelo user agent o cliente que chamava sem contexto, separar erros "
+        "de cliente de falhas de coleta e mostrar que, com os limiares da Sprint 3, o motor em operação cai quase "
+        "sempre na zona crítica de vibração, ponto que pede revisão do contrato."
     )
     paragrafo(doc, texto, recuo=Cm(0))
     n = len(texto.split())
@@ -147,7 +151,6 @@ def resumo(doc):
 SIGLAS = [
     ("ABNT", "Associação Brasileira de Normas Técnicas"),
     ("API", "Application Programming Interface"),
-    ("CLP", "Controlador Lógico Programável"),
     ("HTTP", "Hypertext Transfer Protocol"),
     ("IA", "Inteligência Artificial"),
     ("IEC", "International Electrotechnical Commission"),
@@ -157,7 +160,9 @@ SIGLAS = [
     ("MES", "Manufacturing Execution System"),
     ("NBR", "Norma Brasileira"),
     ("NIST", "National Institute of Standards and Technology"),
+    ("RBAC", "Role-Based Access Control"),
     ("RM", "Registro de Matrícula"),
+    ("RMS", "Root Mean Square"),
     ("RMF", "Risk Management Framework"),
     ("SLI", "Service Level Indicator"),
     ("SLO", "Service Level Objective"),
@@ -183,10 +188,11 @@ def lista_siglas(doc):
 def introducao(doc):
     titulo(doc, "1 INTRODUÇÃO")
     p(doc, "O Forzy Digital Twin é a solução que o grupo vem desenvolvendo no Challenge da Forzy para acompanhar "
-           "equipamentos industriais a partir de leituras de sensores. Uma das partes da solução é o provider de "
-           "Sensores, que devolve a leitura mais recente de uma tag e o histórico de leituras num intervalo. Essas "
-           "leituras alimentam a classificação de severidade mostrada ao operador e, mais adiante, os modelos de IA "
-           "do gêmeo digital.")
+           "motores industriais a partir de leituras de sensores. O ativo de referência é um motor WEG W22 de 2,2 kW "
+           "com dois sensores, S1 e S2, que medem velocidade de vibração, aceleração e temperatura. No forzy-api, um "
+           "poller consulta os dois sensores a cada 10 s e grava as leituras no banco; o provider de Sensores devolve "
+           "a leitura mais recente e o histórico de cada um. Essas leituras alimentam a classificação de severidade "
+           "mostrada ao operador e os modelos de IA do gêmeo digital (Isolation Forest e LSTM Autoencoder).")
     p(doc, "Até este checkpoint o provider não deixava rastro de uso. Não era possível responder quem consultou "
            "uma tag, a partir de qual tela, quanto tempo a resposta levou ou se o dado entregue já estava velho. "
            "Sem esse registro não há como auditar o comportamento do serviço nem perceber que um coletor parou "
@@ -197,9 +203,11 @@ def introducao(doc):
            "gerador de tráfego e um script de análise que compara os números medidos com os limiares definidos.")
     p(doc, "O escopo segue o enunciado do checkpoint e fica menor que o da Sprint 4. Só o provider de Sensores "
            "(leitura atual e histórico) foi exposto, sem autenticação e sem migrar os providers de Equipamentos e "
-           "Plantas. O provider usado aqui é simulado, com falhas de coleta reproduzidas de propósito, como explica "
-           "a seção 3.4. O tema também deve entrar no próximo entregável do Challenge da Forzy, como recomenda o "
-           "enunciado.")
+           "Plantas. Os valores servidos são o histórico real dos sensores e só a coleta é simulada, como explica "
+           "a seção 3.4. Os limiares de condição do motor e as regras de qualidade de dado foram herdados do Metric "
+           "Contract da Sprint 3 (GOMES et al., 2026), e este checkpoint acrescenta a camada que faltava: medir a "
+           "própria API e o dado que ela entrega. O tema também deve entrar no próximo entregável do Challenge, "
+           "como recomenda o enunciado.")
     p(doc, "O documento está organizado assim: a seção 2 traz os conceitos usados; a seção 3 descreve a "
            "arquitetura e o que é registrado; as seções 4 a 7 apresentam o metric contract, as baselines e "
            "limiares, a camada de visualização e o plano de resposta; a seção 8 mostra os resultados medidos; a "
@@ -237,6 +245,12 @@ def fundamentacao(doc):
     p(doc, "Para um gêmeo digital, uma leitura com dez minutos de atraso pode ter valor normal e esconder um "
            "equipamento já em falha. Por isso o contrato mede a idade de cada leitura entregue e não só se a API "
            "respondeu.")
+    p(doc, "A severidade de cada leitura segue a ISO 10816-1, que divide a velocidade de vibração RMS em zonas de "
+           "A a D conforme a classe da máquina (INTERNATIONAL ORGANIZATION FOR STANDARDIZATION, 1995). O motor de "
+           "2,2 kW é Classe I, e o Metric Contract da Sprint 3 adotou 1,8 mm/s (início da zona C) como atenção e "
+           "4,5 mm/s (zona D) como crítico, além de 70 °C e 90 °C para temperatura e 2 g e 4 g para aceleração "
+           "(GOMES et al., 2026). Cabe uma ressalva: a ISO 10816-1 foi substituída pela ISO 20816-1 em 2016, e uma "
+           "revisão futura do contrato deveria conferir os limiares na norma vigente.")
     titulo(doc, "2.4 Governança de IA e rastreabilidade", 2)
     p(doc, "O NIST AI RMF 1.0 organiza a gestão de riscos de IA em quatro funções (Govern, Map, Measure e Manage) e "
            "lista características de sistemas confiáveis, entre elas ser responsabilizável e transparente "
@@ -265,10 +279,11 @@ def arquitetura(doc, cont):
            "calculados e o status de cada um frente ao contrato. Os parâmetros são validados com Pydantic. Tag "
            "inexistente devolve 404 com mensagem indicando a rota que lista as tags válidas, e intervalo inválido "
            "devolve 422.")
-    p(doc, "A leitura atual devolve valor, unidade, timestamp da leitura, severidade (normal, alerta, critico ou "
-           "indeterminada, quando o valor veio nulo), os limiares do sensor, a idade do dado em segundos e um campo "
-           "desatualizado, verdadeiro quando a idade passa de 300 s. Esse campo é a implementação na própria API "
-           "de uma das ações do plano de resposta (seção 7). A Figura 1 resume o fluxo.")
+    p(doc, "A leitura atual devolve, para S1 ou S2, a velocidade de vibração (mm/s), a aceleração (g), a "
+           "temperatura (°C), o timestamp da leitura, a severidade de cada grandeza e a geral (a pior das três), se "
+           "o motor está ligado (vibração a partir de 0,3 mm/s), a idade do dado em segundos e um campo offline, "
+           "verdadeiro quando a idade passa de 30 s. Esse campo implementa na API o circuit breaker da Sprint 3, que "
+           "proíbe decidir pelo último valor quando o sensor está offline. A Figura 1 resume o fluxo.")
     figura(doc, cont, FIG / "fig01_arquitetura.png", "Arquitetura da solução e fluxo do registro de observabilidade",
            15)
     p(doc, "O middleware, registrado com o decorador de middleware HTTP do FastAPI, envolve só as rotas que "
@@ -281,7 +296,8 @@ def arquitetura(doc, cont):
     p(doc, "Todo cliente da API deve enviar dois headers. X-Session-Id identifica a sessão: a interface Streamlit "
            "gera um UUID por sessão do navegador e guarda no session_state (STREAMLIT, 2026), e o script de consumo "
            "gera um por execução. X-Feature identifica a funcionalidade de origem, com valores como "
-           "tela-leitura-atual, tela-historico, tela-observabilidade e script-historico.")
+           "tela-leitura-atual, tela-historico, tela-observabilidade e script-historico. O forzy-api já gravava um "
+           "session_id fixo (poller) na tabela de leituras brutas; aqui o identificador passa a vir de quem consulta.")
     p(doc, "O grupo decidiu não rejeitar chamadas sem esses headers. A chamada é atendida e o campo que faltou é "
            "gravado como ausente, com headers_completos igual a falso. Se a API respondesse 400, o cliente "
            "problemático deixaria de aparecer nos registros e a cobertura de headers ficaria artificialmente em "
@@ -312,25 +328,34 @@ def arquitetura(doc, cont):
     ]
     grade(doc, cont, "Quadro", "Campos do registro de observabilidade", ["Campo", "Conteúdo"],
           [list(c) for c in campos], [5.5, 10])
-    titulo(doc, "3.4 Provider simulado", 2)
-    p(doc, "O provider de Sensores construído em aula não foi copiado para este repositório. Para que o "
-           "checkpoint rode em qualquer máquina sem depender de outra fonte de dados, o grupo escreveu um provider "
-           "simulado com a mesma interface (leitura atual e histórico por tag) e quatro tags: TT-101 "
-           "(temperatura do mancal do motor M-01, em °C), PT-201 (pressão de descarga da bomba B-02, em bar), "
-           "VT-301 (vibração do redutor R-03, em mm/s) e CT-501 (corrente do motor M-05, em A). A amostragem "
-           "nominal é de 30 s e cada amostra leva de 3 a 20 s para ser publicada.")
-    p(doc, "As leituras são determinísticas: a mesma tag no mesmo instante sempre gera o mesmo valor, o que deixa "
-           "o histórico estável entre consultas. O simulador reproduz de propósito problemas comuns de coleta. Em "
-           "2% dos instantes a amostra se perde. Em cada janela de 4 minutos há 10% de chance de o coletor parar "
-           "por 1 a 7 minutos. Valor nulo aparece em 1% das amostras e qualidade nula em 3%. A consulta tem "
-           "latência variável, com 2% de consultas lentas (250 a 600 ms a mais), e a fonte falha com 0,4% de "
-           "probabilidade, o que gera 503. Sem essas falhas todos os indicadores de dado ficariam em 100% e o "
-           "contrato não teria o que verificar.")
+    titulo(doc, "3.4 Origem dos dados: histórico real e coleta simulada", 2)
+    hr = DET["historico_real"]
+    p(doc, "Os sensores da Forzy hoje devolvem dado zerado, defeito confirmado pelo fabricante, e nos dias em que "
+           "funcionaram mandaram cerca de 10 minutos de dados no total (GOMES et al., 2026). Por isso o provider "
+           "deste checkpoint usa o mesmo recurso do modo demonstração do forzy-api: o histórico real exportado do "
+           f"mestre IO-Link em 19/05/2026, com {br(hr['linhas'], 0)} linhas e {br(hr['duracao_h'], 2)} horas de "
+           "velocidade, aceleração e temperatura das portas 1 (S1) e 2 (S2). O arquivo foi copiado sem alteração "
+           "para o repositório.")
+    p(doc, "O registrador do IO-Link grava uma linha quando o valor muda, então com o motor parado aparecem "
+           "intervalos de até 228 s sem linha, que não são falha de coleta. Para não confundir as duas coisas, o "
+           "provider imita o pipeline real: a cada 10 s um poller lê o último valor de cada sensor, como faz o "
+           "forzy_poller.py, e grava a leitura. O histórico é repetido em laço sobre o relógio atual, a partir de um "
+           f"ponto configurável (padrão 13:38, ajustável pela {SETTINGS_REPLAY}), e valores fora da faixa física válida da "
+           "Sprint 3 são anulados.")
+    p(doc, "O que é simulado é a coleta e o custo da consulta. Em cada janela de 4 minutos há 10% de chance de o "
+           "endpoint dos sensores ficar fora do ar por 1 a 7 minutos, derrubando S1 e S2 juntos, e 2% dos polls se "
+           "perdem individualmente. A consulta ao banco tem latência variável, com 2% de consultas lentas (250 a "
+           "600 ms a mais), e falha com 0,4% de probabilidade, o que gera 503. Com isso os indicadores de dado têm "
+           "o que medir, e os valores do motor, que alimentam a severidade, continuam sendo os medidos de fato.")
 
 
 def metric_contract(doc, cont):
     titulo(doc, "4 METRIC CONTRACT")
-    p(doc, "O metric contract fica no arquivo governanca/metric_contract.yaml, versionado junto com o código. "
+    p(doc, "O Metric Contract da Sprint 3 normatizou a interpretação dos sensores: limiares de vibração, "
+           "temperatura e aceleração, faixas físicas válidas e o circuit breaker para dado offline ou lacuna. O "
+           "contrato deste checkpoint parte dele e cobre o que ficou de fora: o comportamento da API e a qualidade "
+           "do dado no momento em que é entregue a quem consulta. "
+           "Ele fica no arquivo governanca/metric_contract.yaml, versionado junto com o código. "
            "Para cada indicador ele traz nome, definição, fórmula, campo de origem no registro, janela de medição, "
            "unidade, direção (se valor maior ou menor é pior), baseline, limiar de alerta, limiar crítico, "
            "justificativa, visualização recomendada, ação em cada nível e responsável. O mesmo arquivo é lido pela "
@@ -347,24 +372,28 @@ def metric_contract(doc, cont):
     p(doc, "Alguns indicadores do enunciado precisaram de interpretação. Tempo de atualização foi entendido como "
            "o intervalo entre leituras consecutivas que o histórico devolve, e por isso só existe nas chamadas de "
            "histórico. Taxa de completude de freshness foi entendida como a fração de leituras atuais entregues "
-           "dentro do prazo de 90 s, que complementa o p95 da idade: o p95 mostra o tamanho do atraso na cauda e a "
-           "taxa mostra com que frequência o prazo é quebrado.")
+           "dentro do prazo de 30 s, o critério de sensor online da Sprint 3, que complementa o p95 da idade: o p95 "
+           "mostra o tamanho do atraso na cauda e a taxa mostra com que frequência o sensor estava offline. A "
+           "cobertura mínima de cinco leituras válidas em 5 minutos, também da Sprint 3, aparece aqui pelo tempo de "
+           "atualização e pela maior lacuna, e a faixa física válida aparece pela completude.")
 
 
 def baselines(doc, cont):
     titulo(doc, "5 BASELINES E LIMIARES")
     titulo(doc, "5.1 Obtenção da baseline", 2)
     p(doc, "A baseline foi calculada sobre registros reais gravados pela API, gerados pelo script "
-           "scripts/gerar_trafego.py no cenário baseline. Esse cenário simula a operação normal: seis sessões da "
-           "interface, todas com os dois headers, só tags válidas e uma chamada por vez. A execução ocorreu em "
+           "scripts/gerar_trafego.py no cenário baseline. Esse cenário simula o uso normal: seis sessões da "
+           "interface, todas com os dois headers, só os sensores S1 e S2 e uma chamada por vez. A API foi iniciada "
+           "logo antes, com o replay no trecho das 13:38 do histórico, então a baseline coincidiu com o motor parado "
+           "e a avaliação pegou a partida das 13:44 e a operação plena que vem depois. A execução ocorreu em "
            f"{data_br(EXEC_B['inicio'])}, das {hora(EXEC_B['inicio'])} às {hora(EXEC_B['fim'])} (UTC), e produziu "
            f"{br(DET['chamadas_baseline'], 0)} registros. As falhas do provider simulado (perda de amostra, parada "
-           "do coletor, campo nulo, 503 ocasional) continuaram ativas, porque fazem parte da operação normal de um "
-           "coletor industrial. O que o cenário baseline não tem são os problemas de cliente.")
+           "do endpoint, 503 ocasional) continuaram ativas, porque fazem parte da operação normal da coleta. O que o "
+           "cenário baseline não tem são os problemas de cliente.")
     p(doc, "Em seguida rodamos o cenário avaliacao, das "
            f"{hora(EXEC_A['inicio'])} às {hora(EXEC_A['fim'])}, com {br(DET['chamadas_avaliacao'], 0)} chamadas e "
            f"concorrência {EXEC_A['concorrencia']}. Nele entram, além das telas, uma integração com o MES que faz "
-           "polling da leitura atual, um cliente legado sem headers, chamadas com só um header, consultas a tags "
+           "polling da leitura atual, um cliente legado sem headers, chamadas com só um header, consultas a sensores "
            "inexistentes e parâmetros fora da faixa. A conformidade da seção 8 é medida sobre esse segundo "
            "período. O script governanca/analise.py separa as duas janelas pelo arquivo data/execucoes.json e, com "
            "a opção --gravar-baseline, escreve os valores medidos no próprio contrato.")
@@ -373,9 +402,9 @@ def baselines(doc, cont):
            "precisaria ser recalculada sobre semanas de uso real, separando turnos.")
     titulo(doc, "5.2 Limiares e justificativas", 2)
     p(doc, "Os limiares foram definidos antes de olhar os resultados da avaliação, a partir de três referências: "
-           "a experiência do operador na interface (tempo de resposta percebido), a característica do sensor "
-           "(amostragem de 30 s e atraso de publicação de até 20 s) e a prática de SLO descrita por Beyer et al. "
-           "(2016). A Tabela 1 mostra a baseline medida ao lado dos dois níveis de limiar.")
+           "a experiência do operador na interface (tempo de resposta percebido), as regras de qualidade de dado "
+           "do Metric Contract da Sprint 3 (poll de 10 s, offline acima de 30 s, janela de diagnóstico de 5 minutos) "
+           "e a prática de SLO descrita por Beyer et al. (2016). A Tabela 1 mostra a baseline medida ao lado dos dois níveis de limiar.")
 
     def lim(i, chave):
         valor = i.get(chave)
@@ -399,17 +428,17 @@ def baselines(doc, cont):
            "painel de apoio à manutenção que não comanda equipamento. Abaixo de 99% o problema deixa de ser "
            "pontual. O 4xx foi separado do 5xx porque a causa e o responsável mudam: 4xx quase sempre é cliente "
            "montando a URL errada, e a interface só oferece tags válidas, então 3% já é anormal.")
-    p(doc, "Freshness e tempo de atualização. Uma leitura saudável tem até cerca de 50 s de idade (30 s de "
-           "amostragem mais 20 s de publicação). Passar de 90 s quer dizer que pelo menos duas amostras seguidas "
-           "não chegaram, e acima de 5 minutos o dado já não serve para decidir nada sobre o equipamento. Para o "
-           "intervalo entre leituras, a média 20% acima do nominal (36 s) indica perda frequente de amostras; com "
-           "45 s, uma em cada três amostras se perdeu.")
+    p(doc, "Freshness e tempo de atualização. Com poll a cada 10 s, uma leitura saudável tem até cerca de 11 s "
+           "de idade. O alerta em 30 s é o critério de sensor offline da Sprint 3, e o crítico em 300 s corresponde "
+           "a uma janela de diagnóstico de 5 minutos inteira sem dado novo. Para o intervalo entre leituras, a média "
+           "20% acima do nominal (12 s) indica perda frequente de polls; com 15 s, uma em cada três leituras se "
+           "perdeu. A maior lacuna usa os mesmos 30 s e 300 s.")
     p(doc, "Completude e cobertura. A completude tolera 2% de campos faltando antes do alerta porque um campo nulo "
            "isolado, como a qualidade, não impede a leitura. A cobertura de headers tem meta de 95% e não de 100% "
            "para aceitar chamadas manuais de teste pelo /docs. Volume não tem valor certo, depende do turno, então "
            "o limiar é relativo à baseline: o que preocupa é a queda brusca, sinal de cliente parado. A proporção "
-           "de leituras críticas é um indicador do equipamento e não da API; 5% e 10% são pontos de partida que a "
-           "engenharia de manutenção deveria revisar.")
+           "de leituras críticas é um indicador do equipamento e não da API. Ela usa a severidade calculada com os "
+           "limiares da Sprint 3, e 5% e 10% são pontos de partida que o Técnico N2 e o Gestor N3 deveriam revisar.")
 
 
 VISUAL = [
@@ -488,11 +517,13 @@ def plano_resposta(doc, cont):
                i["responsavel"]] for i in CONTRATO["indicadores"] if i.get("limiar_alerta") is not None]
     grade(doc, cont, "Quadro", "Ações por indicador e nível de limiar",
           ["Indicador", "Alerta", "Crítico", "Responsável"], linhas, [3.0, 5.2, 5.2, 2.4])
-    p(doc, "Duas ações já estão implementadas no código. A leitura atual traz o campo desatualizado quando a idade "
-           "passa de 300 s, e a interface mostra o aviso de dado desatualizado e diz que a severidade não deve ser "
-           "usada para decisão. A interface também avisa quando o campo de qualidade vem vazio. As demais ações "
+    p(doc, "Três ações já estão implementadas no código. A leitura atual traz o campo offline quando a idade "
+           "passa de 30 s, e a interface avisa que, pelo circuit breaker, a severidade não deve ser usada para "
+           "decisão. Com o motor abaixo de 0,3 mm/s a interface informa que o diagnóstico não se aplica, como manda "
+           "a Sprint 3. Valores fora da faixa física válida são anulados antes de chegar ao cliente. As demais ações "
            "dependem de processo (chamado, plantão, contato com o dono do cliente) e ficam como proposta para a "
-           "Sprint 4, quando houver alertas automáticos.")
+           "Sprint 4, quando houver alertas automáticos. Os papéis Técnico N2 e Gestor N3 são os do RBAC definido "
+           "na Sprint 1.")
     p(doc, "No caso da completude, a ação crítica de bloquear a inferência do modelo com payload incompleto é a "
            "ligação mais direta com IA. Um modelo que recebe valor nulo ou leitura velha devolve uma previsão com "
            "aparência de confiável, e o registro de observabilidade é o que permite barrar essa entrada antes.")
@@ -529,46 +560,54 @@ def resultados(doc, cont):
 
 def analise_resultados() -> list[str]:
     """Parágrafos da análise. Escritos depois de ver os números; os valores vêm do JSON."""
-    atrasadas = DET["atrasadas_90s_por_tag"]
-    ct = atrasadas.get("CT-501", {"leituras": 0, "idade_max_s": 0, "primeira": EXEC_A["inicio"]})
-    outras = {t: v for t, v in atrasadas.items() if t != "CT-501"}
-    outras_txt = "; ".join(f"a {t} teve mais {br(v['leituras'], 0)}, com no máximo {br(v['idade_max_s'], 0)} s"
-                           for t, v in outras.items())
+    sev_b = DET["severidade_leitura_atual_baseline"]
+    sev_a = DET["severidade_leitura_atual_avaliacao"]
+    hr = DET["historico_real"]
     sem_header = DET["sem_header_por_feature_e_user_agent"]
     legado = sem_header.get("ausente | python-requests/legado", 0)
     parcial = sem_header.get("tela-leitura-atual | forzy-streamlit/1.0", 0)
     e404 = DET["erros_404_por_tag"]
-    lacuna_b = DET["maior_lacuna_por_tag_baseline"]
-    tags_lacuna = [t for t, v in lacuna_b.items() if v > IND["maior_lacuna"]["limiar_critico"]]
+    lacunas = DET["maior_lacuna_por_tag_avaliacao"]
     return [
-        "O problema mais sério apareceu nos indicadores de dado. A partir das "
-        f"{hora(ct['primeira'])} a tag CT-501 passou a responder com leituras cada vez mais velhas, até "
-        f"{br(ct['idade_max_s'], 0)} s, sinal de que o coletor dessa tag parou (Figura 6). Foram "
-        f"{br(ct['leituras'], 0)} leituras acima de 90 s só dessa tag"
-        + (f"; {outras_txt}" if outras_txt else "") + ". Com isso a taxa de completude de freshness caiu para "
-        f"{br(AVAL['taxa_freshness_no_prazo_pct'])}%, abaixo do limiar crítico de 90%, e a Figura 7 mostra a queda "
-        f"janela a janela. O p95 da idade ficou em {br(AVAL['freshness_p95_s'])} s, em alerta e perto do crítico. "
-        f"Ao todo, {br(DET['leituras_desatualizadas_300s'], 0)} respostas passaram de 300 s e saíram com o campo "
-        "desatualizado marcado, que é a ação crítica do contrato funcionando na prática.",
+        "O resultado mais importante não veio da API, e sim do motor. Na baseline, com o motor parado, as "
+        f"{br(sum(sev_b.values()), 0)} leituras atuais saíram todas normais. Na avaliação o replay chegou à partida "
+        f"das 13:44 e à operação plena, e {br(sev_a.get('critico', 0), 0)} das {br(sum(sev_a.values()), 0)} "
+        f"leituras saíram críticas, uma proporção de {br(AVAL['proporcao_critica_pct'])}%, muito acima do limiar "
+        "de 10% (Figura 13). A causa é só a vibração: no histórico inteiro a temperatura não passou de "
+        f"{br(max(hr['S1']['temperatura_max_c'], hr['S2']['temperatura_max_c']), 0)} °C e a aceleração não passou "
+        f"de {br(max(hr['S1']['aceleracao_max_g'], hr['S2']['aceleracao_max_g']), 2)} g, longe dos limiares, enquanto "
+        f"o platô de operação fica em {br(hr['S1']['mediana_plato_mm_s'], 2)} mm/s no S1 e "
+        f"{br(hr['S2']['mediana_plato_mm_s'], 2)} mm/s no S2, dentro da zona D da Classe I (acima de 4,5 mm/s).",
 
-        "A mesma parada não apareceu no indicador de maior lacuna do histórico. A lacuna só pode ser medida quando "
-        "a leitura seguinte chega, e o coletor da CT-501 ainda estava parado no fim da avaliação, então o "
-        "histórico simplesmente terminava mais cedo. Isso mostra que os dois indicadores se completam: freshness "
-        "pega a parada em curso e a lacuna registra a parada depois que ela acaba. O valor de "
-        f"{br(AVAL['intervalo_atualizacao_max_s'], 0)} s que deixou a maior lacuna em nível crítico veio de paradas "
-        f"anteriores das tags {' e '.join(tags_lacuna)}, que já estavam na última hora de histórico durante a "
-        "baseline. O tempo médio de atualização ficou em "
-        f"{br(AVAL['intervalo_atualizacao_medio_s'])} s, dentro do limiar, porque poucas lacunas longas pesam pouco "
-        "na média (Figura 9).",
+        "Contando as linhas do histórico de 19/05 com o motor ligado, "
+        f"{br(hr['S1']['zona_d_entre_ligado_pct'])}% (S1) e {br(hr['S2']['zona_d_entre_ligado_pct'])}% (S2) estão "
+        "na zona D. Esses percentuais são por linha do registrador, que grava mais linhas com o motor em "
+        "movimento, então servem como ordem de grandeza e não como tempo exato. O documento da Sprint 3 cita "
+        "cerca de 0,57 mm/s como leitura em operação normal, valor bem abaixo do platô e que, nesse histórico, "
+        "só aparece fora dele. Ou o motor está de fato numa condição de vibração inaceitável, ou os "
+        "limiares da Classe I não se aplicam a esta montagem (motor em bancada, posição do sensor), ou o valor "
+        "de referência da Sprint 3 veio de outro período. O contrato não decide isso sozinho; é exatamente o "
+        "cenário de assinatura conhecida do ativo que a Sprint 3 deixou para decisão humana, e a alteração de "
+        "limiar exige o Gestor N3.",
+
+        "Nos indicadores de dado, a avaliação não pegou nenhuma queda do endpoint: o p95 da idade ficou em "
+        f"{br(AVAL['freshness_p95_s'])} s, todas as leituras chegaram dentro dos 30 s e o tempo médio de "
+        f"atualização foi de {br(AVAL['intervalo_atualizacao_medio_s'])} s, perto dos 10 s nominais. Mesmo assim a "
+        f"maior lacuna ficou em {br(AVAL['intervalo_atualizacao_max_s'], 0)} s, em alerta, nos dois sensores ao "
+        f"mesmo tempo ({', '.join(f'{t}: {br(v, 0)} s' for t, v in lacunas.items())}). Foi uma queda do endpoint "
+        "anterior ao teste, que ainda estava na última hora devolvida pelo histórico; como derrubou S1 e S2 "
+        "juntos, aponta para a conectividade e não para um sensor. Freshness mede só o agora, e a lacuna é o "
+        "indicador que guarda a memória da última hora, então os dois se completam (Figuras 6 e 9).",
 
         f"A taxa de erro 4xx chegou a {br(AVAL['taxa_erro_4xx_pct'])}%, nível crítico. Foram "
         f"{br(DET['erros_4xx_por_status'].get('404', 0), 0)} respostas 404 e "
-        f"{br(DET['erros_4xx_por_status'].get('422', 0), 0)} respostas 422. Os 404 vieram das tags "
+        f"{br(DET['erros_4xx_por_status'].get('422', 0), 0)} respostas 422. Os 404 vieram dos identificadores "
         + ", ".join(f"{t} ({n})" for t, n in e404.items())
-        + ". A PT-2O1 tem a letra O no lugar do zero, erro típico de tag digitada à mão. Os 422 foram pedidos de "
-        "histórico com limite fora da faixa de 1 a 5000. Como essas chamadas traziam o header de feature das "
-        "telas, o campo feature sozinho não basta para achar a origem; seria preciso cruzar com session_id e "
-        "user_agent, que é o que a ação de alerta do contrato pede.",
+        + ". O SI tem a letra I no lugar do número 1, erro típico de identificador digitado à mão, e o MOTOR-2 "
+        "mistura o nome do componente com a tag do sensor. Os 422 foram pedidos de histórico com limite fora da "
+        "faixa de 1 a 5000. Como essas chamadas traziam o header de feature das telas, o campo feature sozinho "
+        "não basta para achar a origem; é preciso cruzar com session_id e user_agent, que é o que a ação de "
+        "alerta do contrato pede.",
 
         f"A cobertura de headers ficou em {br(AVAL['cobertura_headers_pct'], 2)}%, em alerta e a poucos décimos do "
         f"crítico. A Figura 10 aponta a origem: {br(legado, 0)} chamadas do cliente com user agent "
@@ -579,21 +618,21 @@ def analise_resultados() -> list[str]:
 
         f"A latência ficou dentro dos limiares. O p95 foi de {br(AVAL['latencia_p95_ms'])} ms contra "
         f"{br(BASE['latencia_p95_ms'])} ms na baseline. O p99, porém, subiu de {br(BASE['latencia_p99_ms'])} ms "
-        f"para {br(AVAL['latencia_p99_ms'])} ms com a concorrência maior e as consultas lentas do historiador "
+        f"para {br(AVAL['latencia_p99_ms'])} ms com a concorrência maior e as consultas lentas "
         f"({br(DET['chamadas_lentas_acima_250ms'], 0)} chamadas acima de 250 ms). Na Figura 2 o p99 passa do "
         "valor de alerta do p95 em alguns minutos enquanto o p95 quase não se move, o que justifica acompanhar os "
         "dois. Por rota, o p95 do histórico foi de "
         f"{br(DET['latencia_p95_por_rota'].get('/v1/sensores/{tag}/historico'))} ms e o da leitura atual de "
         f"{br(DET['latencia_p95_por_rota'].get('/v1/sensores/{tag}/leitura-atual'))} ms.",
 
-        f"A disponibilidade na avaliação foi de {br(AVAL['disponibilidade_pct'], 2)}%, com "
-        f"{br(DET['erros_5xx'], 0)} resposta 503 no período. Na baseline, com {br(DET['erros_5xx_baseline'], 0)} falhas em "
-        f"{br(DET['chamadas_baseline'], 0)} chamadas, ela ficou em {br(BASE['disponibilidade_pct'], 2)}%, abaixo "
-        "da própria meta. Com amostras pequenas cada falha pesa muito (uma falha em 300 chamadas tira 0,33 ponto "
-        "percentual), e por isso o contrato mede disponibilidade em 30 dias para o SLO e só usa a janela curta "
-        "para acompanhamento. A completude do payload ficou em "
-        f"{br(AVAL['completude_media_pct'])}%, o volume em {br(AVAL['throughput_por_min'])} chamadas por minuto e "
-        f"não houve leitura crítica no período ({br(AVAL['proporcao_critica_pct'])}%).",
+        f"A disponibilidade foi de {br(AVAL['disponibilidade_pct'], 2)}% nas duas janelas, sem nenhuma resposta "
+        "5xx, e a completude do payload ficou em "
+        f"{br(AVAL['completude_media_pct'])}%. Este último número merece cuidado: o histórico real não tem nenhum "
+        "valor fora da faixa física válida, então a completude não teve como cair aqui. Ela passa a ser útil "
+        "quando o hardware voltar a mandar dado ao vivo, e o defeito de dado zerado já relatado pela Forzy é o "
+        "tipo de falha que esse indicador, combinado com a faixa válida, deveria pegar. O volume ficou em "
+        f"{br(AVAL['throughput_por_min'])} chamadas por minuto, acima da baseline, porque o cenário de avaliação "
+        "tem mais clientes.",
 
         violacoes_baseline(),
     ]
@@ -611,7 +650,8 @@ def violacoes_baseline() -> str:
     if not nomes:
         return "Nenhum indicador estava fora dos limiares na baseline."
     lista = ", ".join(nomes[:-1]) + (" e " if len(nomes) > 1 else "") + nomes[-1]
-    return (f"A própria baseline já estava fora do limiar em {len(nomes)} indicadores: {lista}. Os limiares foram "
+    qtd = "1 indicador" if len(nomes) == 1 else f"{len(nomes)} indicadores"
+    return (f"A própria baseline já estava fora do limiar em {qtd}: {lista}. Os limiares foram "
             "mantidos como estavam, porque ajustá-los para caber na baseline esconderia justamente o que eles "
             "devem mostrar. Fica como achado para a revisão do contrato: ou o coletor e a fonte precisam melhorar, "
             "ou a meta precisa ser rediscutida com quem usa o dado.")
@@ -656,6 +696,10 @@ REFERENCIAS = [
     "https://sre.google/sre-book/table-of-contents/. Acesso em: 4 out. 2026.",
     "FASTAPI. Middleware. [S. l.]: FastAPI, 2026. Disponível em: https://fastapi.tiangolo.com/tutorial/middleware/. "
     "Acesso em: 4 out. 2026.",
+    "GOMES, Matheus Cardoso et al. Forzy: gêmeo digital com IA: governança em IA e business analytics: Challenge "
+    "Sprint 3. São Paulo: FIAP, 2026. Documento interno do grupo.",
+    "INTERNATIONAL ORGANIZATION FOR STANDARDIZATION. ISO 10816-1: mechanical vibration: evaluation of machine "
+    "vibration by measurements on non-rotating parts: part 1: general guidelines. Geneva: ISO, 1995.",
     "INTERNATIONAL ORGANIZATION FOR STANDARDIZATION. ISO/IEC 25012: software engineering: software product quality "
     "requirements and evaluation (SQuaRE): data quality model. Geneva: ISO, 2008.",
     "INTERNATIONAL ORGANIZATION FOR STANDARDIZATION. ISO/IEC 42001: information technology: artificial "
@@ -674,7 +718,7 @@ REFERENCIAS = [
 
 # Trechos em negrito em cada referência (título da obra, conforme NBR 6023).
 DESTAQUE_REF = [
-    "Site reliability engineering", "Middleware", "ISO/IEC 25012", "ISO/IEC 42001",
+    "Site reliability engineering", "Middleware", "Forzy", "ISO 10816-1", "ISO/IEC 25012", "ISO/IEC 42001",
     "Artificial intelligence risk management framework (AI RMF 1.0)", "Observability primer",
     "Proceedings", "Add statefulness to apps",
 ]
