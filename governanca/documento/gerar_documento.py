@@ -207,7 +207,8 @@ def introducao(doc):
            "a seção 3.4. Os limiares de condição do motor e as regras de qualidade de dado foram herdados do Metric "
            "Contract da Sprint 3 (GOMES et al., 2026), e este checkpoint acrescenta a camada que faltava: medir a "
            "própria API e o dado que ela entrega. O tema também deve entrar no próximo entregável do Challenge, "
-           "como recomenda o enunciado.")
+           "como recomenda o enunciado. O código completo (back-end, front-end, scripts, análise e o gerador deste "
+           "documento) está em https://github.com/MathCG19/forzy-observabilidade.")
     p(doc, "O documento está organizado assim: a seção 2 traz os conceitos usados; a seção 3 descreve a "
            "arquitetura e o que é registrado; as seções 4 a 7 apresentam o metric contract, as baselines e "
            "limiares, a camada de visualização e o plano de resposta; a seção 8 mostra os resultados medidos; a "
