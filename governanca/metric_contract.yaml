@@ -9,12 +9,13 @@
 versao: 1.0
 servico: Sensor Monitoring API
 escopo: rotas /v1/sensores/{tag}/leitura-atual e /v1/sensores/{tag}/historico
-amostragem_nominal_s: 30
+amostragem_nominal_s: 10
+base: Metric Contract do Challenge Sprint 3 (seções 7.4 a 7.7), limiares de condição e qualidade
 
 baseline_origem:
   cenario: baseline
-  inicio: "2026-10-05T00:21:41.070+00:00"
-  fim: "2026-10-05T00:26:39.953+00:00"
+  inicio: "2026-10-05T00:54:44.667+00:00"
+  fim: "2026-10-05T00:59:43.701+00:00"
   chamadas: 300
 
 indicadores:
@@ -27,7 +28,7 @@ indicadores:
     janela: 5 minutos, deslizante
     unidade: ms
     direcao: maior_pior
-    baseline: 44.03
+    baseline: 50.55
     limiar_alerta: 250
     limiar_critico: 1000
     justificativa: >
@@ -53,7 +54,7 @@ indicadores:
     janela: 5 minutos, deslizante
     unidade: ms
     direcao: maior_pior
-    baseline: 17.01
+    baseline: 17.61
     limiar_alerta: 80
     limiar_critico: 300
     justificativa: >
@@ -73,7 +74,7 @@ indicadores:
     janela: 15 minutos
     unidade: ms
     direcao: maior_pior
-    baseline: 75.99
+    baseline: 120.56
     limiar_alerta: 800
     limiar_critico: 2000
     justificativa: >
@@ -93,7 +94,7 @@ indicadores:
     janela: 15 minutos
     unidade: "%"
     direcao: maior_pior
-    baseline: 0.67
+    baseline: 0.0
     limiar_alerta: 0.5
     limiar_critico: 1.0
     justificativa: >
@@ -135,7 +136,7 @@ indicadores:
     janela: 30 dias para o SLO, 1 hora para acompanhamento
     unidade: "%"
     direcao: menor_pior
-    baseline: 99.33
+    baseline: 100.0
     limiar_alerta: 99.5
     limiar_critico: 99.0
     justificativa: >
@@ -156,27 +157,27 @@ indicadores:
     janela: 15 minutos
     unidade: s
     direcao: maior_pior
-    baseline: 44.0
-    limiar_alerta: 90
+    baseline: 9.9
+    limiar_alerta: 30
     limiar_critico: 300
     justificativa: >
-      Com amostragem de 30 s e até 20 s de atraso de publicação, uma leitura saudável
-      tem no máximo uns 50 s. Passar de 90 s significa que pelo menos duas amostras
-      seguidas não chegaram. Acima de 5 minutos o dado não serve mais para decisão
-      sobre o equipamento. A API usa esse mesmo valor para marcar a leitura como desatualizada.
+      O poller lê os sensores a cada 10 s, então uma leitura saudável tem até uns
+      11 s. O Metric Contract do CS3 define o sensor como offline sem leitura há mais
+      de 30 s, e a API usa esse valor para marcar o campo offline. Acima de 300 s a
+      janela de diagnóstico de 5 minutos inteira fica sem dado novo.
     visualizacao: linha no tempo da idade, com faixas de alerta e crítico pintadas
     acao_alerta: >
-      Mostrar na interface o aviso de dado atrasado e verificar o coletor da tag
-      afetada (fila, conexão com o CLP).
+      Marcar o sensor como offline na interface (circuit breaker do CS3: não decidir
+      pelo último valor) e verificar a conectividade do endpoint dos sensores, não o motor.
     acao_critico: >
-      Marcar a leitura como "dado desatualizado", não usar a leitura para cálculo de
-      severidade nem para inferência do modelo, notificar o responsável pelo coletor.
-    responsavel: Engenharia de dados (coletor)
+      Suspender o diagnóstico do motor, não usar a leitura para severidade nem para
+      inferência do modelo e abrir chamado de conectividade IoT.
+    responsavel: Engenharia de dados (poller e endpoints)
 
   - id: freshness_no_prazo
     nome: Taxa de completude de freshness
-    definicao: Percentual de leituras atuais entregues dentro do prazo de 90 s.
-    formula: leituras com idade_dado_s <= 90 / leituras atuais com status 200 x 100
+    definicao: Percentual de leituras atuais entregues dentro do prazo de 30 s (sensor online).
+    formula: leituras com idade_dado_s <= 30 / leituras atuais com status 200 x 100
     fonte: chamadas.idade_dado_s
     campo_resumo: taxa_freshness_no_prazo_pct
     janela: 1 hora
@@ -186,12 +187,13 @@ indicadores:
     limiar_alerta: 95
     limiar_critico: 90
     justificativa: >
-      O p95 diz quão ruim fica a cauda. Esta taxa diz com que frequência o prazo é
-      quebrado, que é o número que a manutenção entende como SLO de dado.
+      O p95 diz quão ruim fica a cauda. Esta taxa diz em que fração das consultas o
+      sensor estava online pelo critério do CS3, que é o número que a manutenção
+      entende como SLO de dado.
     visualizacao: linha da evolução da taxa por janela, com linha de meta
-    acao_alerta: Levantar quais tags concentram os atrasos e checar o coletor delas.
-    acao_critico: Registrar incidente de qualidade de dado e suspender alertas automáticos baseados nessas tags.
-    responsavel: Engenharia de dados (coletor)
+    acao_alerta: Levantar em quais horários e sensores o dado ficou offline e checar o endpoint e o poller.
+    acao_critico: Registrar incidente de qualidade de dado e rebaixar os alertas automáticos do período para revisão humana.
+    responsavel: Engenharia de dados (poller e endpoints)
 
   - id: completude_payload
     nome: Completude do payload
@@ -202,18 +204,20 @@ indicadores:
     janela: 1 hora
     unidade: "%"
     direcao: menor_pior
-    baseline: 99.3
+    baseline: 100.0
     limiar_alerta: 98
     limiar_critico: 95
     justificativa: >
       Completude é uma das características do modelo de qualidade de dados da
-      ISO/IEC 25012. Campo nulo em valor ou qualidade impede o cálculo de severidade.
+      ISO/IEC 25012. A API anula valores fora da faixa física válida do CS3 (vibração
+      de 0 a 50 mm/s, temperatura de -10 a 150 °C, aceleração de 0 a 20 g), então uma
+      queda aqui indica sensor com defeito, como o dado zerado já relatado pela Forzy.
     visualizacao: linha da média por janela (gauge no card do resumo)
-    acao_alerta: Identificar quais campos estão vindo nulos e em quais tags.
+    acao_alerta: Identificar qual grandeza está saindo da faixa válida e em qual sensor.
     acao_critico: >
       Bloquear a inferência do modelo com payload incompleto e registrar incidente
       de qualidade de dado.
-    responsavel: Engenharia de dados (coletor)
+    responsavel: Engenharia de dados (poller e endpoints)
 
   - id: intervalo_atualizacao
     nome: Tempo de atualização
@@ -224,17 +228,17 @@ indicadores:
     janela: 1 hora
     unidade: s
     direcao: maior_pior
-    baseline: 32.4
-    limiar_alerta: 36
-    limiar_critico: 45
+    baseline: 10.4
+    limiar_alerta: 12
+    limiar_critico: 15
     justificativa: >
-      O nominal é 30 s. Média 20% acima disso (36 s) indica perda frequente de
-      amostras. Com 45 s, uma em cada três amostras se perdeu e a série deixa de
-      representar a dinâmica do equipamento.
+      O nominal é 10 s, o intervalo do poller. Média 20% acima disso (12 s) indica
+      perda frequente de polls. Com 15 s, uma em cada três leituras se perdeu e a
+      série deixa de mostrar transientes curtos, como a partida do motor.
     visualizacao: histograma dos intervalos entre leituras
-    acao_alerta: Verificar a taxa de amostragem configurada no coletor.
+    acao_alerta: Verificar o log do poller (falhas de GET nos endpoints dos sensores).
     acao_critico: Sinalizar no gráfico de histórico os trechos com lacuna e abrir chamado para o coletor.
-    responsavel: Engenharia de dados (coletor)
+    responsavel: Engenharia de dados (poller e endpoints)
 
   - id: maior_lacuna
     nome: Maior lacuna no histórico
@@ -245,17 +249,17 @@ indicadores:
     janela: 1 hora
     unidade: s
     direcao: maior_pior
-    baseline: 330.0
-    limiar_alerta: 120
+    baseline: 160.0
+    limiar_alerta: 30
     limiar_critico: 300
     justificativa: >
-      A média esconde paradas longas do coletor. Quatro amostras perdidas em
-      sequência (120 s) já pedem investigação; cinco minutos sem dado é o mesmo
-      limite crítico usado para freshness.
+      A média esconde paradas longas da coleta. Uma lacuna acima de 30 s quer dizer
+      que o sensor ficou offline pelo critério do CS3; cinco minutos sem dado é o
+      mesmo limite crítico usado para freshness.
     visualizacao: aparece no mesmo histograma, como linha vertical do máximo
-    acao_alerta: Cruzar o horário da lacuna com os logs do coletor.
-    acao_critico: Registrar a parada como incidente do coletor.
-    responsavel: Engenharia de dados (coletor)
+    acao_alerta: Cruzar o horário da lacuna com o log do poller.
+    acao_critico: Registrar a parada como incidente de coleta e marcar o trecho no gráfico de histórico.
+    responsavel: Engenharia de dados (poller e endpoints)
 
   - id: cobertura_headers
     nome: Cobertura de headers (rastreabilidade)
@@ -290,7 +294,7 @@ indicadores:
     janela: 5 minutos
     unidade: chamadas/min
     direcao: menor_pior
-    baseline: 60.23
+    baseline: 60.2
     limiar_relativo_baseline: true
     limiar_alerta: 0.5
     limiar_critico: 0.2
@@ -341,7 +345,7 @@ indicadores:
 
   - id: proporcao_critica
     nome: Proporção de leituras críticas
-    definicao: Percentual de leituras atuais com severidade crítica.
+    definicao: Percentual de leituras atuais com severidade crítica (zona D da ISO 10816-1 ou temperatura acima de 90 °C).
     formula: leituras atuais com severidade = critico / leituras atuais com status 200 x 100
     fonte: chamadas.severidade
     campo_resumo: proporcao_critica_pct
@@ -352,9 +356,11 @@ indicadores:
     limiar_alerta: 5
     limiar_critico: 10
     justificativa: >
-      Indicador do equipamento, não da API. Um salto na proporção pode ser problema
-      real na planta ou sensor descalibrado, e nos dois casos alguém precisa olhar.
+      Indicador do equipamento, não da API. Usa os limiares de condição do CS3
+      (vibração de 1,8 e 4,5 mm/s pela ISO 10816-1 Classe I, temperatura de 70 e 90 °C,
+      aceleração de 2 e 4 g). Um salto na proporção pode ser problema real no motor
+      ou limiar mal calibrado, e nos dois casos alguém precisa olhar.
     visualizacao: linha da proporção por janela
-    acao_alerta: Avisar a engenharia de manutenção e conferir se a tag tem histórico de falso positivo.
-    acao_critico: Abrir ordem de inspeção do equipamento e verificar a calibração do sensor.
-    responsavel: Engenharia de manutenção
+    acao_alerta: Notificar o Técnico N2 e conferir se o motor estava em teste de carga ou partida.
+    acao_critico: Abrir ordem de serviço; qualquer parada exige aprovação do Gestor N3, como no CS3.
+    responsavel: Técnico N2 (manutenção) e Gestor N3
